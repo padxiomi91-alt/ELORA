@@ -81,7 +81,7 @@ video {
 <div id="camera" class="hidden">
 <h3>Camera Device</h3>
 
-<p>Your private connection code:</p>
+<p>Your 6-digit connection code:</p>
 <h2 id="mycode">Connecting...</h2>
 
 <button onclick="startCamera()">START CAMERA</button>
@@ -93,7 +93,13 @@ video {
 <div id="viewer" class="hidden">
 <h3>Viewer Device</h3>
 
-<input id="code" placeholder="Enter camera code">
+<input
+id="code"
+type="text"
+inputmode="numeric"
+maxlength="6"
+placeholder="Enter 6-digit camera code"
+>
 
 <button onclick="connectCamera()">CONNECT</button>
 <button onclick="requestStop()">REQUEST STOP</button>
@@ -108,55 +114,73 @@ video {
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 
 <script>
+
 let peer = null;
 let stream = null;
 let connections = [];
 let calls = [];
 let currentRole = "";
 
+const peerOptions = {
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun.cloudflare.com:3478" }
+    ],
+    iceCandidatePoolSize: 10
+  }
+};
+
 function status(message) {
   document.getElementById("status").textContent = message;
 }
 
-function setupPeer(role) {
+function makeCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
-  if (peer) {
-    peer.destroy();
-  }
+function setupPeer(role, requestedCode = null) {
 
-  // Free STUN servers - no account or API key.
-  peer = new Peer(undefined, {
-    config: {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun.cloudflare.com:3478" }
-      ],
-      iceCandidatePoolSize: 10
-    }
-  });
+  if (peer) peer.destroy();
+
+  const code = role === "camera"
+    ? (requestedCode || makeCode())
+    : undefined;
+
+  peer = new Peer(code, peerOptions);
 
   peer.on("open", id => {
 
     if (role === "camera") {
       document.getElementById("mycode").textContent = id;
-      status("Camera ready. Share your code privately.");
+      status("Camera ready. Share this code privately.");
     } else {
-      status("Viewer ready. Enter camera code.");
+      status("Viewer ready. Enter the camera code.");
     }
 
   });
 
   peer.on("error", error => {
+
+    if (role === "camera" && error.type === "unavailable-id") {
+      status("Code already in use. Creating another code...");
+      setupPeer("camera", makeCode());
+      return;
+    }
+
     status("Connection error: " + error.type);
+
   });
 
   peer.on("disconnected", () => {
+
     status("Connection interrupted. Reconnecting...");
 
     if (peer && !peer.destroyed) {
       peer.reconnect();
     }
+
   });
 
   if (role === "camera") {
@@ -262,7 +286,7 @@ function showViewer() {
 async function startCamera() {
 
   if (!peer || !peer.open) {
-    status("Please wait for camera connection code.");
+    status("Please wait for your camera code.");
     return;
   }
 
@@ -348,11 +372,14 @@ function connectCamera() {
 
   const id = document.getElementById("code").value.trim();
 
-  if (!id || !peer || !peer.open) {
-
-    status("Enter a valid code and wait for viewer readiness.");
+  if (!/^\d{6}$/.test(id)) {
+    status("Please enter the 6-digit camera code.");
     return;
+  }
 
+  if (!peer || !peer.open) {
+    status("Please wait until viewer is ready.");
+    return;
   }
 
   const conn = peer.connect(id);
