@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ELORA</title>
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101522;
+  color: white;
+  text-align: center;
+}
+.container {
+  max-width: 440px;
+  margin: 65px auto;
+  padding: 25px;
+}
+h1 {
+  font-size: 42px;
+  letter-spacing: 5px;
+}
+p { color: #b8c2d8; }
+button, input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 15px;
+  margin: 10px 0;
+  border-radius: 9px;
+  border: none;
+  font-size: 16px;
+}
+button {
+  background: #637cff;
+  color: white;
+  font-weight: bold;
+}
+video {
+  width: 100%;
+  background: black;
+  border-radius: 12px;
+  margin-top: 15px;
+}
+#status {
+  margin-top: 20px;
+  color: #9db1ff;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ELORA</h1>
+  <p>Private Live Camera Connection</p>
+
+  <button onclick="showCamera()">CAMERA</button>
+  <button onclick="showViewer()">VIEW</button>
+
+  <div id="camera" hidden>
+    <h3>Camera Device</h3>
+    <button onclick="startCamera()">START CAMERA</button>
+    <p>Your private connection code:</p>
+    <h2 id="mycode">Waiting...</h2>
+    <button onclick="stopCamera()">STOP CAMERA</button>
+    <video id="local" autoplay muted playsinline></video>
+  </div>
+
+  <div id="viewer" hidden>
+    <h3>Viewer Device</h3>
+    <input id="code" placeholder="Enter camera code">
+    <button onclick="connectCamera()">CONNECT</button>
+    <button onclick="requestStop()">REQUEST STOP</button>
+    <video id="remote" autoplay playsinline controls></video>
+  </div>
+
+  <p id="status">Welcome to ELORA</p>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+let peer, stream, connections = [], calls = [];
+let cameraMode = false;
+
+function status(message) {
+  document.getElementById("status").textContent = message;
+}
+
+function showCamera() {
+  cameraMode = true;
+  document.getElementById("camera").hidden = false;
+  document.getElementById("viewer").hidden = true;
+
+  if (!peer) {
+    peer = new Peer();
+    peer.on("open", id => {
+      document.getElementById("mycode").textContent = id;
+      status("Camera ready. Share your code privately.");
+    });
+    peer.on("connection", conn => {
+      connections.push(conn);
+      conn.on("data", message => {
+        if (message === "START_REQUEST") {
+          status("Viewer requests camera access. Tap START CAMERA to approve.");
+        }
+        if (message === "STOP") stopCamera();
+      });
+    });
+  }
+}
+
+async function startCamera() {
+  try {
+    if (!stream) {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+        audio: false
+      });
+    }
+    document.getElementById("local").srcObject = stream;
+    status("Camera is LIVE. Streaming is active.");
+
+    connections.forEach(conn => {
+      if (conn.open) {
+        let call = peer.call(conn.peer, stream);
+        calls.push(call);
+      }
+    });
+  } catch (error) {
+    status("Camera permission denied or unavailable.");
+  }
+}
+
+function stopCamera() {
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+  calls.forEach(call => call.close());
+  calls = [];
+  document.getElementById("local").srcObject = null;
+  status("Camera stopped.");
+}
+
+function showViewer() {
+  document.getElementById("camera").hidden = true;
+  document.getElementById("viewer").hidden = false;
+
+  if (!peer) {
+    peer = new Peer();
+    peer.on("call", call => {
+      call.answer();
+      call.on("stream", remoteStream => {
+        document.getElementById("remote").srcObject = remoteStream;
+        status("Connected. Live video received.");
+      });
+    });
+  }
+}
+
+function connectCamera() {
+  const id = document.getElementById("code").value.trim();
+  if (!id || !peer) {
+    status("Enter a valid camera code.");
+    return;
+  }
+  const conn = peer.connect(id);
+  conn.on("open", () => {
+    connections.push(conn);
+    conn.send("START_REQUEST");
+    status("Connection established. Waiting for camera owner to approve.");
+  });
+  conn.on("error", () => status("Connection failed."));
+}
+
+function requestStop() {
+  connections.forEach(conn => {
+    if (conn.open) conn.send("STOP");
+  });
+  status("Stop request sent.");
+}
+</script>
+</body>
+</html>
