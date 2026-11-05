@@ -69,6 +69,7 @@ video {
 </head>
 
 <body>
+
 <div class="container">
 
 <h1>ELORA</h1>
@@ -118,19 +119,32 @@ function status(message) {
 }
 
 function setupPeer(role) {
+
   if (peer) {
     peer.destroy();
   }
 
-  peer = new Peer();
+  // Free STUN servers - no account or API key.
+  peer = new Peer(undefined, {
+    config: {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun.cloudflare.com:3478" }
+      ],
+      iceCandidatePoolSize: 10
+    }
+  });
 
   peer.on("open", id => {
+
     if (role === "camera") {
       document.getElementById("mycode").textContent = id;
       status("Camera ready. Share your code privately.");
     } else {
       status("Viewer ready. Enter camera code.");
     }
+
   });
 
   peer.on("error", error => {
@@ -139,22 +153,30 @@ function setupPeer(role) {
 
   peer.on("disconnected", () => {
     status("Connection interrupted. Reconnecting...");
-    if (peer && !peer.destroyed) peer.reconnect();
+
+    if (peer && !peer.destroyed) {
+      peer.reconnect();
+    }
   });
 
   if (role === "camera") {
+
     peer.on("connection", conn => {
+
       connections.push(conn);
 
       conn.on("open", () => {
+
         status("Viewer connected.");
 
         if (stream) {
           sendVideo(conn.peer);
         }
+
       });
 
       conn.on("data", message => {
+
         if (message === "START_REQUEST") {
           status("Viewer connected. Camera owner controls START.");
         }
@@ -162,19 +184,25 @@ function setupPeer(role) {
         if (message === "STOP") {
           stopCamera();
         }
+
       });
 
       conn.on("close", () => {
         connections = connections.filter(c => c !== conn);
       });
+
     });
+
   }
 
   if (role === "viewer") {
+
     peer.on("call", call => {
+
       call.answer();
 
       call.on("stream", remoteStream => {
+
         const video = document.getElementById("remote");
         video.srcObject = remoteStream;
 
@@ -182,12 +210,15 @@ function setupPeer(role) {
           status("Tap the video to start playback.");
         });
 
-        status("LIVE — Video connected.");
+        status("LIVE - Video connected.");
+
       });
 
       call.on("close", () => {
+
         document.getElementById("remote").srcObject = null;
         status("Video connection closed.");
+
       });
 
       call.on("error", () => {
@@ -195,11 +226,15 @@ function setupPeer(role) {
       });
 
       calls.push(call);
+
     });
+
   }
+
 }
 
 function showCamera() {
+
   currentRole = "camera";
 
   document.getElementById("camera").classList.remove("hidden");
@@ -208,9 +243,11 @@ function showCamera() {
   if (!peer || peer.destroyed) {
     setupPeer("camera");
   }
+
 }
 
 function showViewer() {
+
   currentRole = "viewer";
 
   document.getElementById("viewer").classList.remove("hidden");
@@ -219,20 +256,25 @@ function showViewer() {
   if (!peer || peer.destroyed) {
     setupPeer("viewer");
   }
+
 }
 
 async function startCamera() {
+
   if (!peer || !peer.open) {
     status("Please wait for camera connection code.");
     return;
   }
 
   try {
+
     if (!stream) {
+
       stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
         audio: false
       });
+
     }
 
     document.getElementById("local").srcObject = stream;
@@ -240,40 +282,57 @@ async function startCamera() {
     status("Camera LIVE. Sending video to connected viewers.");
 
     connections.forEach(conn => {
-      if (conn.open) sendVideo(conn.peer);
+
+      if (conn.open) {
+        sendVideo(conn.peer);
+      }
+
     });
 
   } catch (error) {
+
     status("Camera error: " + error.message);
+
   }
+
 }
 
 function sendVideo(viewerId) {
+
   if (!stream || !peer) return;
 
   calls = calls.filter(call => {
+
     if (call.peer === viewerId) {
       call.close();
       return false;
     }
+
     return true;
+
   });
 
   const call = peer.call(viewerId, stream);
 
   if (call) {
+
     calls.push(call);
 
     call.on("error", () => {
       status("Unable to send video. Check internet connection.");
     });
+
   }
+
 }
 
 function stopCamera() {
+
   if (stream) {
+
     stream.getTracks().forEach(track => track.stop());
     stream = null;
+
   }
 
   calls.forEach(call => call.close());
@@ -282,22 +341,29 @@ function stopCamera() {
   document.getElementById("local").srcObject = null;
 
   status("Camera stopped.");
+
 }
 
 function connectCamera() {
+
   const id = document.getElementById("code").value.trim();
 
   if (!id || !peer || !peer.open) {
+
     status("Enter a valid code and wait for viewer readiness.");
     return;
+
   }
 
   const conn = peer.connect(id);
+
   connections.push(conn);
 
   conn.on("open", () => {
+
     conn.send("START_REQUEST");
     status("Connected. Waiting for camera owner to start.");
+
   });
 
   conn.on("error", () => {
@@ -307,15 +373,24 @@ function connectCamera() {
   conn.on("close", () => {
     status("Camera connection closed.");
   });
+
 }
 
 function requestStop() {
+
   connections.forEach(conn => {
-    if (conn.open) conn.send("STOP");
+
+    if (conn.open) {
+      conn.send("STOP");
+    }
+
   });
 
   status("Stop request sent.");
+
 }
+
 </script>
+
 </body>
 </html>
