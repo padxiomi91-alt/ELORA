@@ -24,6 +24,20 @@ import org.webrtc.VideoTrack
  * publishCamera=true is the camera phone; false is a receive-only viewer.
  * Signaling is supplied by the caller.
  */
+private object EloraWebRtcRuntime {
+    @Volatile private var initialized = false
+
+    @Synchronized
+    fun initialize(context: Context) {
+        if (initialized) return
+        PeerConnectionFactory.initialize(
+            PeerConnectionFactory.InitializationOptions.builder(context.applicationContext)
+                .createInitializationOptions()
+        )
+        initialized = true
+    }
+}
+
 class WebRtcSession(
     context: Context,
     private val publishCamera: Boolean,
@@ -45,10 +59,7 @@ class WebRtcSession(
     private var closed = false
 
     init {
-        PeerConnectionFactory.initialize(
-            PeerConnectionFactory.InitializationOptions.builder(appContext)
-                .createInitializationOptions()
-        )
+        EloraWebRtcRuntime.initialize(appContext)
         factory = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
             .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
