@@ -188,6 +188,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun switchCamera() {
+        if (connection != null) { connection?.switchCamera(); return }
         if (cameraProvider == null) {
             statusText.text = "Start the camera first."
             return
