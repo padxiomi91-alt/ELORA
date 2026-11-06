@@ -18,7 +18,7 @@ function waitForMessage(socket, expectedType, timeoutMs = 4000) {
       if (message.type === expectedType || message.type === "ERROR") {
         clearTimeout(timer);
         socket.off("message", onMessage);
-        if (message.type === "ERROR") reject(new Error(message.code));
+        if (message.type === "ERROR" && expectedType !== "ERROR") reject(new Error(message.code));
         else resolve(message);
       }
     };
