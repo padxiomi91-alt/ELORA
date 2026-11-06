@@ -37,6 +37,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            connection?.close()
+            connection = null
             stopPreview()
             statusText.text = "Camera stopped."
         }
@@ -51,7 +53,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             setPadding(0, 24, 0, 8)
         }
         val note = TextView(this).apply {
-            text = "Native camera preview • Front / rear switching"
+            text = "Private camera • Live viewer connection"
             textSize = 16f
         }
         previewView = PreviewView(this).apply {
@@ -99,7 +101,6 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             setPadding(24, 28, 24, 20)
             addView(title)
             addView(note)
-            addView(previewView)
             addView(remoteRenderer)
             addView(statusText)
             addView(roomCodeText)
@@ -259,7 +260,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRoomCode(code: String) {
         runOnUiThread {
-            roomCodeText.text = "PRIVATE CODE\\n$code"
+            roomCodeText.text = "PRIVATE CODE\n$code"
             statusText.text = "Share this code only with the phone you trust."
         }
     }
