@@ -201,6 +201,22 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         bindSelectedCamera()
     }
 
+    private fun joinCameraRoom() {
+        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+            statusText.text = "Secure ELORA server is not deployed yet."
+            return
+        }
+        val code = codeInput.text.toString().trim()
+        if (!code.matches(Regex("\\d{6}"))) {
+            statusText.text = "Enter the six-digit code shown on the camera phone."
+            return
+        }
+        connection?.close()
+        connection = EloraConnectionController(this, BuildConfig.ELORA_SIGNALING_URL, this)
+        connection?.joinAsViewer(code)
+        statusText.text = "Connecting to camera phone…"
+    }
+
     private fun stopPreview() {
         cameraProvider?.unbindAll()
         cameraProvider = null
