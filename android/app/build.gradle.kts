@@ -13,6 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        buildConfigField("String", "ELORA_SIGNALING_URL", "\"\"")
     }
 
     compileOptions {
@@ -24,9 +25,6 @@ android {
         buildConfig = true
     }
 
-    defaultConfig {
-        buildConfigField("String", "ELORA_SIGNALING_URL", "\\\"\\\"")
-    }
 
     kotlinOptions {
         jvmTarget = "17"
