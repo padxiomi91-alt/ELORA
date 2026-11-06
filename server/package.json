@@ -1,0 +1,17 @@
+{
+  "name": "elora-signaling",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Private, short-lived WebRTC signaling service for ELORA",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
