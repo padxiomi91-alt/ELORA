@@ -20,7 +20,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private val cameraRequest = 41
     private val notificationRequest = 42
     private lateinit var previewView: PreviewView
@@ -28,6 +28,8 @@ class MainActivity : AppCompatActivity() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var receiverRegistered = false
+    private var connection: EloraConnectionController? = null
+    private var remoteVideoTrack: org.webrtc.VideoTrack? = null
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
