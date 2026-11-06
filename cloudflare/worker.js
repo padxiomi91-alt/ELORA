@@ -156,7 +156,12 @@ export class EloraSignaling extends DurableObject {
           return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
         }
         this.setAttachment(ws, { ...a, approved: true });
-        return send(ws, "APPROVED", { trusted: true });
+        send(ws, "APPROVED", { trusted: true });
+        send(this.ownerSocket(room.code), "VIEWER_AUTO_APPROVED", {
+          viewerId: a.viewerId,
+          deviceId: a.deviceId
+        });
+        return;
       }
       if (!a.requested) {
         this.setAttachment(ws, { ...a, requested: true });
