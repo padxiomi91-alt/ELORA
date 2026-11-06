@@ -17,6 +17,7 @@ class EloraConnectionController(
         fun onStatus(message: String)
         fun onRoomCode(code: String)
         fun onViewerRequest(viewerId: String)
+        fun onLocalVideo(track: VideoTrack)
         fun onRemoteVideo(track: VideoTrack)
     }
 
@@ -108,6 +109,7 @@ class EloraConnectionController(
             true,
             { payload -> signaling.sendSignal(payload, ownerSecret) },
             { status -> callbacks.onStatus(status) },
+            { track -> callbacks.onLocalVideo(track) },
             { track -> callbacks.onRemoteVideo(track) }
         )
         signaling.connect()
