@@ -21,6 +21,11 @@ android {
     }
     buildFeatures {
         viewBinding = false
+        buildConfig = true
+    }
+
+    defaultConfig {
+        buildConfigField("String", "ELORA_SIGNALING_URL", "\\\"\\\"")
     }
 
     kotlinOptions {
