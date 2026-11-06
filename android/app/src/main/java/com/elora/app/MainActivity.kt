@@ -141,7 +141,15 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         val intent = Intent(this, CameraForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
-        startPreview()
+        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+            statusText.text = "Secure ELORA server is not deployed yet."
+            stopService(intent)
+            return
+        }
+        connection?.close()
+        connection = EloraConnectionController(this, BuildConfig.ELORA_SIGNALING_URL, this)
+        connection?.createCameraRoom()
+        statusText.text = "Opening private camera room…"
     }
 
     private fun startPreview() {
