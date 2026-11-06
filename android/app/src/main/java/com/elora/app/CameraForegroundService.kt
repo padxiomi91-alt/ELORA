@@ -68,6 +68,10 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         controller?.switchCamera()
     }
 
+    fun approvePendingViewer(): Boolean = controller?.approvePendingViewer() == true
+
+    fun declinePendingViewer(): Boolean = controller?.declinePendingViewer() == true
+
     fun stopCameraSession() {
         controller?.close()
         controller = null
