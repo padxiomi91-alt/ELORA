@@ -1,6 +1,11 @@
 name: Deploy ELORA signaling backend
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "cloudflare/**"
+      - ".github/workflows/cloudflare-worker-deploy.yml"
   workflow_dispatch:
 
 jobs:
