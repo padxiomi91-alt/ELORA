@@ -67,6 +67,10 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             connection = null
             cameraService?.setCallbacks(null)
             cameraService = null
+            if (cameraServiceBound) {
+                unbindService(cameraServiceConnection)
+                cameraServiceBound = false
+            }
             stopPreview()
             statusText.text = "Camera stopped."
         }
@@ -344,10 +348,11 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
                 .setTitle("New viewer request")
                 .setMessage("Allow this phone to view your camera? Approval trusts this device for future sessions.")
                 .setPositiveButton("APPROVE") { _, _ ->
-                    if (connection?.approvePendingViewer() == true) statusText.text = "Approved. Connecting video…"
+                    val approved = cameraService?.approvePendingViewer() ?: (connection?.approvePendingViewer() == true)
+                    if (approved) statusText.text = "Approved. Connecting video…"
                 }
                 .setNegativeButton("DECLINE") { _, _ ->
-                    connection?.declinePendingViewer()
+                    if (cameraService != null) cameraService?.declinePendingViewer() else connection?.declinePendingViewer()
                     statusText.text = "Viewer request declined."
                 }
                 .show()
