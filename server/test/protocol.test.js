@@ -64,9 +64,11 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
 
   const viewer = await connect();
   const joinedPromise = waitForMessage(viewer, "JOINED");
-  const requestPromise = waitForMessage(owner, "VIEW_REQUEST");
   viewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created.code, deviceId: "viewer_device_identity_0001" }));
   const joined = await joinedPromise;
+  assert.equal(joined.ownerId, ownerId);
+  const requestPromise = waitForMessage(owner, "VIEW_REQUEST");
+  viewer.send(JSON.stringify({ type: "AUTH_TRUST", trustCredential: "" }));
   const request = await requestPromise;
   assert.equal(request.viewerId, joined.viewerId);
 
@@ -111,17 +113,19 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   const returningViewer = await connect();
   const joined2Promise = waitForMessage(returningViewer, "JOINED");
   const approved2Promise = waitForMessage(returningViewer, "APPROVED");
-  returningViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "viewer_device_identity_0001", trustCredential: trust.credential }));
+  returningViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "viewer_device_identity_0001" }));
   const joined2 = await joined2Promise;
-  assert.equal(joined2.trusted, true);
+  assert.equal(joined2.ownerId, ownerId);
+  returningViewer.send(JSON.stringify({ type: "AUTH_TRUST", trustCredential: trust.credential }));
   assert.equal((await approved2Promise).trusted, true);
 
   returningViewer.close();
   const untrustedViewer = await connect();
   const joined3Promise = waitForMessage(untrustedViewer, "JOINED");
-  const request3Promise = waitForMessage(owner2, "VIEW_REQUEST");
-  untrustedViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "another_viewer_device_00001", trustCredential: "wrong-token" }));
+  untrustedViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "another_viewer_device_00001" }));
   assert.equal((await joined3Promise).waitingForApproval, true);
+  const request3Promise = waitForMessage(owner2, "VIEW_REQUEST");
+  untrustedViewer.send(JSON.stringify({ type: "AUTH_TRUST", trustCredential: "wrong-token" }));
   assert.equal((await request3Promise).returningDevice, false);
 
   const revokePromise = waitForMessage(owner2, "DEVICE_REVOKED");
