@@ -1,5 +1,7 @@
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const os = require("node:os");
+const fs = require("node:fs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const WebSocket = require("ws");
@@ -33,8 +35,10 @@ function connect() {
 }
 
 test("owner creates a room, approves viewer, and relays signaling", async t => {
+  const trustDir = fs.mkdtempSync(path.join(os.tmpdir(), "elora-trust-"));
+  const trustFile = path.join(trustDir, "trusted-devices.json");
   child = spawn(process.execPath, [path.join(__dirname, "..", "index.js")], {
-    env: { ...process.env, PORT: String(port), ALLOWED_ORIGINS: "" },
+    env: { ...process.env, PORT: String(port), ALLOWED_ORIGINS: "", ELORA_TRUST_FILE: trustFile },
     stdio: "ignore"
   });
   baseUrl = `ws://127.0.0.1:${port}`;
@@ -48,11 +52,12 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.equal(ready, true, "signaling server should start");
-  t.after(() => child.kill());
+  t.after(() => { child.kill(); fs.rmSync(trustDir, { recursive: true, force: true }); });
 
   const owner = await connect();
   const createdPromise = waitForMessage(owner, "ROOM_CREATED");
-  owner.send(JSON.stringify({ type: "CREATE_ROOM" }));
+  const ownerId = "owner_device_identity_000001";
+  owner.send(JSON.stringify({ type: "CREATE_ROOM", ownerId }));
   const created = await createdPromise;
   assert.match(created.code, /^\d{6}$/);
   assert.ok(created.ownerSecret);
@@ -77,12 +82,17 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   }));
   assert.equal((await rejectedApproval).code, "UNAUTHORIZED");
 
+  const credentialPromise = waitForMessage(viewer, "TRUST_CREDENTIAL");
   const approvedPromise = waitForMessage(viewer, "APPROVED");
   owner.send(JSON.stringify({
     type: "APPROVE_VIEWER",
     viewerId: joined.viewerId,
     ownerSecret: created.ownerSecret
   }));
+  const trust = await credentialPromise;
+  assert.equal(trust.ownerId, ownerId);
+  assert.equal(trust.deviceId, "viewer_device_identity_0001");
+  assert.match(trust.credential, /^[A-Za-z0-9_-]{40,}$/);
   await approvedPromise;
 
   const relayedPromise = waitForMessage(owner, "SIGNAL");
@@ -92,4 +102,31 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
 
   owner.close();
   viewer.close();
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  const owner2 = await connect();
+  const created2Promise = waitForMessage(owner2, "ROOM_CREATED");
+  owner2.send(JSON.stringify({ type: "CREATE_ROOM", ownerId }));
+  const created2 = await created2Promise;
+  const returningViewer = await connect();
+  const joined2Promise = waitForMessage(returningViewer, "JOINED");
+  const approved2Promise = waitForMessage(returningViewer, "APPROVED");
+  returningViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "viewer_device_identity_0001", trustCredential: trust.credential }));
+  const joined2 = await joined2Promise;
+  assert.equal(joined2.trusted, true);
+  assert.equal((await approved2Promise).trusted, true);
+
+  returningViewer.close();
+  const untrustedViewer = await connect();
+  const joined3Promise = waitForMessage(untrustedViewer, "JOINED");
+  const request3Promise = waitForMessage(owner2, "VIEW_REQUEST");
+  untrustedViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "another_viewer_device_00001", trustCredential: "wrong-token" }));
+  assert.equal((await joined3Promise).waitingForApproval, true);
+  assert.equal((await request3Promise).returningDevice, false);
+
+  const revokePromise = waitForMessage(owner2, "DEVICE_REVOKED");
+  owner2.send(JSON.stringify({ type: "REVOKE_DEVICE", deviceId: "viewer_device_identity_0001", ownerSecret: created2.ownerSecret }));
+  await revokePromise;
+  owner2.close();
+  untrustedViewer.close();
 });
