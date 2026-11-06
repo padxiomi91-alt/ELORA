@@ -30,6 +30,10 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private var receiverRegistered = false
     private var connection: EloraConnectionController? = null
     private var remoteVideoTrack: org.webrtc.VideoTrack? = null
+    private lateinit var roomCodeText: TextView
+    private lateinit var codeInput: android.widget.EditText
+    private lateinit var remoteRenderer: org.webrtc.SurfaceViewRenderer
+    private var rendererEgl: org.webrtc.EglBase? = null
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -56,6 +60,18 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             )
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
+        remoteRenderer = org.webrtc.SurfaceViewRenderer(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 260)
+            rendererEgl = org.webrtc.EglBase.create()
+            init(rendererEgl!!.eglBaseContext, null)
+            setEnableHardwareScaler(true)
+        }
+        roomCodeText = TextView(this).apply { textSize = 22f; setPadding(0, 8, 0, 8) }
+        codeInput = android.widget.EditText(this).apply {
+            hint = "Enter 6-digit camera code"
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+        }
         statusText = TextView(this).apply {
             text = "Camera is off."
             textSize = 14f
@@ -69,8 +85,12 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             text = "SWITCH FRONT / BACK"
             setOnClickListener { switchCamera() }
         }
+        val join = Button(this).apply {
+            text = "VIEW ANOTHER PHONE"
+            setOnClickListener { joinCameraRoom() }
+        }
         val stop = Button(this).apply {
-            text = "STOP CAMERA"
+            text = "STOP / DISCONNECT"
             setOnClickListener { stopCamera() }
         }
 
@@ -80,8 +100,12 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             addView(title)
             addView(note)
             addView(previewView)
+            addView(remoteRenderer)
             addView(statusText)
+            addView(roomCodeText)
             addView(start)
+            addView(codeInput)
+            addView(join)
             addView(switch)
             addView(stop)
         })
