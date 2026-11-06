@@ -13,7 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
-        buildConfigField("String", "ELORA_SIGNALING_URL", "\"\"")
+        buildConfigField("String", "ELORA_SIGNALING_URL", "\"wss://elora-signaling.padxiomi91.workers.dev\"")
     }
 
     compileOptions {
