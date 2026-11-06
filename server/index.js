@@ -145,6 +145,7 @@ wss.on("connection", (ws, req) => {
           viewer.approved = false; viewer.socket.close(1000, "Request declined"); room.viewers.delete(msg.viewerId);
         }
         send(viewer.socket, msg.type === "APPROVE_VIEWER" ? "APPROVED" : "DECLINED");
+        if (msg.type === "APPROVE_VIEWER") send(ws, "APPROVAL_CONFIRMED", { viewerId: msg.viewerId });
         return;
       }
       if (msg.type === "REVOKE_DEVICE") {
