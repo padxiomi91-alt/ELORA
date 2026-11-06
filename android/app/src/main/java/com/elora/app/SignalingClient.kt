@@ -7,6 +7,8 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
 
 /**
  * Small WebSocket transport for the ELORA signaling protocol.
@@ -29,6 +31,20 @@ class SignalingClient(
         .build()
 
     @Volatile private var socket: WebSocket? = null
+    private val heartbeatExecutor = Executors.newSingleThreadScheduledExecutor()
+    @Volatile private var heartbeat: ScheduledFuture<*>? = null
+
+    private fun startHeartbeat() {
+        heartbeat?.cancel(false)
+        heartbeat = heartbeatExecutor.scheduleAtFixedRate(
+            { send("PING") }, 60, 60, TimeUnit.SECONDS
+        )
+    }
+
+    private fun stopHeartbeat() {
+        heartbeat?.cancel(false)
+        heartbeat = null
+    }
 
     fun connect() {
         if (!serverUrl.startsWith("wss://") && !serverUrl.startsWith("ws://")) {
@@ -38,6 +54,7 @@ class SignalingClient(
         val request = Request.Builder().url(serverUrl).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                startHeartbeat()
                 listener.onConnected()
             }
 
@@ -50,10 +67,12 @@ class SignalingClient(
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                stopHeartbeat()
                 listener.onDisconnected(reason)
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                stopHeartbeat()
                 listener.onFailure(t.localizedMessage ?: "Signaling connection failed.")
             }
         })
@@ -94,7 +113,9 @@ class SignalingClient(
     }
 
     fun disconnect() {
+        stopHeartbeat()
         socket?.close(1000, "ELORA disconnected")
         socket = null
+        heartbeatExecutor.shutdownNow()
     }
 }
