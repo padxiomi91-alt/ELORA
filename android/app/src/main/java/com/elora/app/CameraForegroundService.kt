@@ -59,9 +59,20 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     }
 
     fun startCameraRoom(serverUrl: String) {
-        controller?.close()
-        controller = EloraConnectionController(applicationContext, serverUrl, this)
-        controller?.createCameraRoom()
+        try {
+            controller?.close()
+            controller = EloraConnectionController(applicationContext, serverUrl, this)
+            controller?.createCameraRoom()
+        } catch (error: Throwable) {
+            android.util.Log.e("ELORA", "Camera startup failed", error)
+            try { controller?.close() } catch (cleanupError: Throwable) {
+                android.util.Log.e("ELORA", "Camera startup cleanup failed", cleanupError)
+            }
+            controller = null
+            onStatus("Camera startup failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     fun switchCamera() {
