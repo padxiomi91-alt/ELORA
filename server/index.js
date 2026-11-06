@@ -90,24 +90,38 @@ wss.on("connection", (ws, req) => {
       return send(ws, "ROOM_CREATED", { code, ownerId, ownerSecret: secret, expiresInSeconds: ROOM_TTL_MS / 1000 });
     }
     if (msg.type === "JOIN_ROOM") {
-      if (ws.role || typeof msg.code !== "string" || !/^\d{6}$/.test(msg.code)) return send(ws, "ERROR", { code: "INVALID_CODE" });
+      if (ws.role || typeof msg.code !== "string" || !/^\\d{6}$/.test(msg.code)) return send(ws, "ERROR", { code: "INVALID_CODE" });
       const room = rooms.get(msg.code);
       if (!room || room.expiresAt < Date.now()) { if (room) removeRoom(msg.code, "expired"); return send(ws, "ERROR", { code: "ROOM_NOT_FOUND" }); }
       if (room.viewers.size >= MAX_VIEWERS_PER_ROOM) return send(ws, "ERROR", { code: "ROOM_FULL" });
       const viewerId = randomId();
       const deviceId = validId(msg.deviceId) ? msg.deviceId : null;
-      const credential = typeof msg.trustCredential === "string" ? msg.trustCredential : "";
-      const record = deviceId && trustStore[trustKey(room.ownerId, deviceId)];
-      const trusted = !!(record && credential && sameSecret(record.tokenHash, tokenHash(credential)));
-      const viewer = { socket: ws, approved: trusted, deviceId };
-      room.viewers.set(viewerId, viewer); ws.role = "viewer"; ws.roomCode = msg.code; ws.viewerId = viewerId;
-      send(ws, "JOINED", { viewerId, waitingForApproval: !trusted, trusted });
-      if (trusted) send(ws, "APPROVED", { trusted: true });
-      else send(room.owner, "VIEW_REQUEST", { viewerId, deviceId, returningDevice: !!record });
+      const viewer = { socket: ws, approved: false, deviceId, requested: false };
+      room.viewers.set(viewerId, viewer);
+      ws.role = "viewer"; ws.roomCode = msg.code; ws.viewerId = viewerId;
+      // Reveal the stable owner identity only after the short-lived room code has joined.
+      // The viewer then presents only the credential belonging to this owner.
+      send(ws, "JOINED", { viewerId, ownerId: room.ownerId, deviceId, waitingForApproval: true });
       return;
     }
     const room = rooms.get(ws.roomCode);
     if (!room) return send(ws, "ERROR", { code: "ROOM_NOT_FOUND" });
+    if (ws.role === "viewer" && msg.type === "AUTH_TRUST") {
+      const viewer = room.viewers.get(ws.viewerId);
+      if (!viewer || viewer.approved) return send(ws, "ERROR", { code: "INVALID_PAIRING_STATE" });
+      const record = viewer.deviceId && trustStore[trustKey(room.ownerId, viewer.deviceId)];
+      const credential = typeof msg.trustCredential === "string" ? msg.trustCredential : "";
+      const trusted = !!(record && credential && sameSecret(record.tokenHash, tokenHash(credential)));
+      if (trusted) {
+        if ([...room.viewers.values()].some(v => v !== viewer && v.approved)) return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
+        viewer.approved = true;
+        send(ws, "APPROVED", { trusted: true });
+      } else if (!viewer.requested) {
+        viewer.requested = true;
+        send(room.owner, "VIEW_REQUEST", { viewerId: ws.viewerId, deviceId: viewer.deviceId, returningDevice: !!record });
+      }
+      return;
+    }
     if (ws.role === "owner") {
       if (!sameSecret(msg.ownerSecret, room.secret)) return send(ws, "ERROR", { code: "UNAUTHORIZED" });
       if (msg.type === "APPROVE_VIEWER" || msg.type === "DECLINE_VIEWER") {
