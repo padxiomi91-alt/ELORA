@@ -291,6 +291,9 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     override fun onDestroy() {
+        connection?.close()
+        connection = null
+        stopService(Intent(this, CameraForegroundService::class.java))
         stopPreview()
         remoteVideoTrack?.removeSink(remoteRenderer)
         remoteRenderer.release()
