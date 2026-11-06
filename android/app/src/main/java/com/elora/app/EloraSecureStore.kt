@@ -47,7 +47,7 @@ class EloraSecureStore(context: Context) {
     private fun read(name: String): String? {
         val encoded = preferences.getString(name, null) ?: return null
         return try {
-            val packed = Base64.decode(encoded, Base64.NO_WRAP or Base64.URL_SAFE)
+            val packed = Base64.decode(encoded, Base64.NO_WRAP)
             val iv = packed.copyOfRange(0, 12)
             val encrypted = packed.copyOfRange(12, packed.size)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
