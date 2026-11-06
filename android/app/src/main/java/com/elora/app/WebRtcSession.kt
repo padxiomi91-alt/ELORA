@@ -29,6 +29,7 @@ class WebRtcSession(
     private val publishCamera: Boolean,
     private val onSignal: (JSONObject) -> Unit,
     private val onStatus: (String) -> Unit,
+    private val onLocalVideo: (VideoTrack) -> Unit,
     private val onRemoteVideo: (VideoTrack) -> Unit
 ) {
     private val appContext = context.applicationContext
@@ -103,6 +104,7 @@ class WebRtcSession(
             textureHelper = texture
             videoSource = source
             localTrack = track
+            onLocalVideo(track)
             onStatus("Camera media engine ready.")
         } else {
             peer.addTransceiver(
