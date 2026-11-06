@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private var remoteVideoTrack: org.webrtc.VideoTrack? = null
     private lateinit var roomCodeText: TextView
     private lateinit var codeInput: android.widget.EditText
+    private lateinit var serverUrlInput: android.widget.EditText
     private lateinit var remoteRenderer: org.webrtc.SurfaceViewRenderer
     private var rendererEgl: org.webrtc.EglBase? = null
 
@@ -74,6 +75,16 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
         }
+        serverUrlInput = android.widget.EditText(this).apply {
+            hint = "Secure server URL (wss://...)"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setText(savedSignalingUrl())
+        }
+        val saveServer = Button(this).apply {
+            text = "SAVE SERVER ADDRESS"
+            setOnClickListener { saveServerAddress() }
+        }
         statusText = TextView(this).apply {
             text = "Camera is off."
             textSize = 14f
@@ -104,6 +115,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             addView(remoteRenderer)
             addView(statusText)
             addView(roomCodeText)
+            addView(serverUrlInput)
+            addView(saveServer)
             addView(start)
             addView(codeInput)
             addView(join)
@@ -121,8 +134,25 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         receiverRegistered = true
     }
 
+    private fun savedSignalingUrl(): String {
+        return getSharedPreferences("elora_settings", MODE_PRIVATE)
+            .getString("signaling_url", BuildConfig.ELORA_SIGNALING_URL)
+            ?.trim().orEmpty()
+    }
+
+    private fun saveServerAddress() {
+        val value = serverUrlInput.text.toString().trim()
+        if (!value.startsWith("wss://")) {
+            statusText.text = "Use a secure WebSocket address beginning with wss://."
+            return
+        }
+        getSharedPreferences("elora_settings", MODE_PRIVATE)
+            .edit().putString("signaling_url", value).apply()
+        statusText.text = "Secure server address saved on this phone."
+    }
+
     private fun requestCameraAndStart() {
-        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+        if (!savedSignalingUrl().startsWith("wss://")) {
             statusText.text = "Secure ELORA server is not deployed yet."
             return
         }
@@ -146,13 +176,13 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         val intent = Intent(this, CameraForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
-        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+        if (!savedSignalingUrl().startsWith("wss://")) {
             statusText.text = "Secure ELORA server is not deployed yet."
             stopService(intent)
             return
         }
         connection?.close()
-        connection = EloraConnectionController(this, BuildConfig.ELORA_SIGNALING_URL, this)
+        connection = EloraConnectionController(this, savedSignalingUrl(), this)
         connection?.createCameraRoom()
         statusText.text = "Opening private camera room…"
     }
@@ -207,7 +237,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun joinCameraRoom() {
-        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+        if (!savedSignalingUrl().startsWith("wss://")) {
             statusText.text = "Secure ELORA server is not deployed yet."
             return
         }
@@ -217,7 +247,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             return
         }
         connection?.close()
-        connection = EloraConnectionController(this, BuildConfig.ELORA_SIGNALING_URL, this)
+        connection = EloraConnectionController(this, savedSignalingUrl(), this)
         connection?.joinAsViewer(code)
         statusText.text = "Connecting to camera phone…"
     }
