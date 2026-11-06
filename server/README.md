@@ -22,10 +22,11 @@ Put the service behind HTTPS/WSS. Set `ALLOWED_ORIGINS` to exact browser origins
 ## Pair-once protocol
 
 1. Camera owner sends `CREATE_ROOM` with a stable random `ownerId` (16–80 URL-safe characters). The server returns a temporary six-digit room code and a session-only `ownerSecret`.
-2. Viewer sends `JOIN_ROOM` with the room code and a stable random `deviceId`.
-3. First-time/unrecognized devices receive `VIEW_REQUEST`; the owner must approve. On approval, the server creates a 256-bit random trust credential, stores only its SHA-256 hash against that owner/device pair, and sends the credential to the viewer in `TRUST_CREDENTIAL`.
-4. On future joins, the viewer sends the same device ID and trust credential. A matching credential is auto-approved without a new owner prompt.
-5. The owner can revoke a device with `REVOKE_DEVICE` and its `deviceId` plus the current `ownerSecret`. The next join from that device requires fresh approval.
+2. Viewer sends `JOIN_ROOM` with the room code and a stable random `deviceId`. The server returns the camera owner’s stable `ownerId` only after the room code is accepted.
+3. Viewer sends `AUTH_TRUST` with the encrypted locally stored credential for that owner. On a first connection, or if the credential is invalid, the server sends `VIEW_REQUEST` to the camera owner.
+4. On approval, the server creates a 256-bit random trust credential, stores only its SHA-256 hash against that owner/device pair, and sends it in `TRUST_CREDENTIAL`. The Android app stores it encrypted using Android Keystore.
+5. On future joins, the viewer discovers the same owner ID and presents the matching credential in `AUTH_TRUST`; the server auto-approves without a new owner prompt.
+6. The owner can revoke a device with `REVOKE_DEVICE` and its `deviceId` plus the current `ownerSecret`. The next join from that device requires fresh approval.
 
 The Android client must keep the owner identity/device identity stable and store trust credentials encrypted with Android Keystore. Those client-side identity storage and protocol integrations are still pending; the server-side pairing protocol alone does not yet provide end-to-end lifetime pairing in the app. Reinstalling the viewer app should lose its local credential and require approval again.
 
