@@ -59,9 +59,10 @@ class EloraSecureStore(context: Context) {
     }
 
     private fun write(name: String, value: String) {
-        val iv = ByteArray(12).also(random::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
+        // Android Keystore requires it to generate the IV when randomized encryption is enabled.
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val iv = cipher.iv
         val encrypted = cipher.doFinal(value.toByteArray(Charsets.UTF_8))
         val packed = iv + encrypted
         preferences.edit().putString(name, Base64.encodeToString(packed, Base64.NO_WRAP)).apply()
