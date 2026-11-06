@@ -113,11 +113,15 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   const returningViewer = await connect();
   const joined2Promise = waitForMessage(returningViewer, "JOINED");
   const approved2Promise = waitForMessage(returningViewer, "APPROVED");
+  const ownerAutoApprovedPromise = waitForMessage(owner2, "VIEWER_AUTO_APPROVED");
   returningViewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "viewer_device_identity_0001" }));
   const joined2 = await joined2Promise;
   assert.equal(joined2.ownerId, ownerId);
   returningViewer.send(JSON.stringify({ type: "AUTH_TRUST", trustCredential: trust.credential }));
   assert.equal((await approved2Promise).trusted, true);
+  const autoApproved = await ownerAutoApprovedPromise;
+  assert.equal(autoApproved.deviceId, "viewer_device_identity_0001");
+  assert.equal(autoApproved.viewerId, joined2.viewerId);
 
   returningViewer.close();
   const untrustedViewer = await connect();
