@@ -78,7 +78,14 @@ class EloraConnectionController(
                     pendingViewerId = message.optString("viewerId")
                     callbacks.onViewerRequest(pendingViewerId!!)
                 }
-                "APPROVED" -> callbacks.onStatus("Access approved. Connecting video…")
+                "APPROVED" -> callbacks.onStatus(
+                    if (message.optBoolean("trusted")) "Trusted device verified. Connecting video…"
+                    else "Access approved. Connecting video…"
+                )
+                "VIEWER_AUTO_APPROVED" -> {
+                    callbacks.onStatus("A previously trusted phone reconnected. Starting video…")
+                    webRtc?.createOffer()
+                }
                 "DECLINED" -> callbacks.onStatus("Camera owner declined the request.")
                 "SIGNAL" -> {
                     val payload = message.optJSONObject("payload")
