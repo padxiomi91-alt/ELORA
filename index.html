@@ -1,423 +1,119 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ELORA</title>
-
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101522">
+<title>ELORA — Private Camera</title>
 <style>
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: #101522;
-  color: white;
-  font-family: Arial, sans-serif;
-  text-align: center;
-}
-
-.container {
-  max-width: 440px;
-  margin: 55px auto;
-  padding: 22px;
-}
-
-h1 {
-  font-size: 43px;
-  letter-spacing: 7px;
-}
-
-p { color: #b8c2d8; }
-
-button, input {
-  width: 100%;
-  padding: 15px;
-  margin: 9px 0;
-  border: 0;
-  border-radius: 9px;
-  font-size: 16px;
-}
-
-button {
-  background: #637cff;
-  color: white;
-  font-weight: bold;
-}
-
-button:active { opacity: .7; }
-
-input {
-  background: white;
-  color: #111;
-}
-
-video {
-  width: 100%;
-  background: black;
-  border-radius: 12px;
-  margin-top: 15px;
-}
-
-#status {
-  margin-top: 20px;
-  color: #9db1ff;
-  overflow-wrap: anywhere;
-}
-
-.hidden { display: none; }
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#101522;color:#f5f7ff;font:16px system-ui,Arial,sans-serif}.wrap{width:min(100% - 28px,460px);margin:34px auto;padding:22px;background:#192235;border:1px solid #2b3852;border-radius:22px}h1{font-size:38px;letter-spacing:8px;margin:4px 0}p{color:#b9c5dc;line-height:1.5}.tag{font-size:13px;letter-spacing:1px;text-transform:uppercase;color:#91a9ff}button,input{width:100%;padding:15px;margin:7px 0;border:0;border-radius:12px;font-size:16px}button{background:#637cff;color:white;font-weight:700}button.secondary{background:#2b3852}button:disabled{opacity:.45}input{background:#fff;color:#111}video{width:100%;background:#05070b;border-radius:14px;margin-top:12px;max-height:55vh}#status{padding:12px;background:#111a2a;border-radius:10px;color:#b9caff;overflow-wrap:anywhere}.code{font-size:34px;letter-spacing:8px;color:#fff;margin:8px}.hidden{display:none}.note{font-size:12px;color:#9aa9c3}
 </style>
 </head>
-
 <body>
+<main class="wrap">
+  <div class="tag">Private live camera</div>
+  <h1>ELORA</h1>
+  <p>Connect two devices using a private six-digit code.</p>
+  <button id="cameraTab">CAMERA DEVICE</button>
+  <button id="viewerTab" class="secondary">VIEWER DEVICE</button>
 
-<div class="container">
+  <section id="camera" class="hidden">
+    <h3>Camera device</h3>
+    <p>Share this code only with the person you want to allow.</p>
+    <div class="code" id="mycode">------</div>
+    <button id="start">START CAMERA</button>
+    <button id="stop" class="secondary">STOP CAMERA</button>
+    <video id="local" autoplay muted playsinline></video>
+    <p class="note">The camera starts only when you tap START. You approve each viewer request on this device.</p>
+  </section>
 
-<h1>ELORA</h1>
-<p>Private Live Camera Connection</p>
+  <section id="viewer" class="hidden">
+    <h3>Viewer device</h3>
+    <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Enter 6-digit camera code">
+    <button id="connect">REQUEST CONNECTION</button>
+    <button id="disconnect" class="secondary">DISCONNECT VIEW</button>
+    <video id="remote" autoplay playsinline controls></video>
+    <p class="note">The camera owner must approve your request and start the camera.</p>
+  </section>
 
-<button onclick="showCamera()">CAMERA</button>
-<button onclick="showViewer()">VIEW</button>
-
-<div id="camera" class="hidden">
-<h3>Camera Device</h3>
-
-<p>Your 6-digit connection code:</p>
-<h2 id="mycode">Connecting...</h2>
-
-<button onclick="startCamera()">START CAMERA</button>
-<button onclick="stopCamera()">STOP CAMERA</button>
-
-<video id="local" autoplay muted playsinline></video>
-</div>
-
-<div id="viewer" class="hidden">
-<h3>Viewer Device</h3>
-
-<input
-id="code"
-type="text"
-inputmode="numeric"
-maxlength="6"
-placeholder="Enter 6-digit camera code"
->
-
-<button onclick="connectCamera()">CONNECT</button>
-<button onclick="requestStop()">REQUEST STOP</button>
-
-<video id="remote" autoplay playsinline controls></video>
-</div>
-
-<p id="status">Welcome to ELORA</p>
-
-</div>
-
+  <p id="status" role="status" aria-live="polite">Welcome to ELORA.</p>
+  <p class="note">Use over HTTPS. Browser camera access may stop when the phone locks or the browser goes into the background. Android may show its camera privacy indicator. ELORA does not hide or bypass system privacy controls.</p>
+</main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
-
 <script>
-
-let peer = null;
-let stream = null;
-let connections = [];
-let calls = [];
-let currentRole = "";
-
-const peerOptions = {
-  config: {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun.cloudflare.com:3478" }
-    ],
-    iceCandidatePoolSize: 10
-  }
-};
-
-function status(message) {
-  document.getElementById("status").textContent = message;
-}
-
-function makeCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-function setupPeer(role, requestedCode = null) {
-
-  if (peer) peer.destroy();
-
-  const code = role === "camera"
-    ? (requestedCode || makeCode())
-    : undefined;
-
-  peer = new Peer(code, peerOptions);
-
-  peer.on("open", id => {
-
-    if (role === "camera") {
-      document.getElementById("mycode").textContent = id;
-      status("Camera ready. Share this code privately.");
-    } else {
-      status("Viewer ready. Enter the camera code.");
-    }
-
-  });
-
-  peer.on("error", error => {
-
-    if (role === "camera" && error.type === "unavailable-id") {
-      status("Code already in use. Creating another code...");
-      setupPeer("camera", makeCode());
-      return;
-    }
-
-    status("Connection error: " + error.type);
-
-  });
-
-  peer.on("disconnected", () => {
-
-    status("Connection interrupted. Reconnecting...");
-
-    if (peer && !peer.destroyed) {
-      peer.reconnect();
-    }
-
-  });
-
-  if (role === "camera") {
-
-    peer.on("connection", conn => {
-
-      connections.push(conn);
-
-      conn.on("open", () => {
-
-        status("Viewer connected.");
-
-        if (stream) {
-          sendVideo(conn.peer);
-        }
-
+let peer=null, stream=null, currentRole="", approvedViewers=new Set(), viewerConn=null, activeCalls=[];
+const $=id=>document.getElementById(id);
+function say(message){$("status").textContent=message}
+function secureCode(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(100000+(a[0]%900000))}
+const peerOptions={config:{iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:stun.cloudflare.com:3478"}],iceCandidatePoolSize:8}};
+function closePeer(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$("local").srcObject=null;activeCalls.forEach(c=>c.close());activeCalls=[];approvedViewers.clear();if(peer){peer.destroy();peer=null}}
+function show(role){currentRole=role;$("camera").classList.toggle("hidden",role!=="camera");$("viewer").classList.toggle("hidden",role!=="viewer");if(!peer||peer.destroyed)startPeer(role)}
+function startPeer(role,preferredCode){
+  if(peer)peer.destroy();
+  const id=role==="camera"?(preferredCode||secureCode()):undefined;
+  peer=new Peer(id,peerOptions);
+  peer.on("open",openedId=>{if(role==="camera"){$("mycode").textContent=openedId;say("Ready. Share your code privately.")}else say("Viewer ready. Enter the camera code.")});
+  peer.on("error",e=>{if(role==="camera"&&e.type==="unavailable-id"){startPeer("camera",secureCode());return}say("Connection issue: "+e.type+". Please try again.")});
+  peer.on("disconnected",()=>{say("Internet connection interrupted. Reconnecting…");if(peer&&!peer.destroyed)peer.reconnect()});
+  if(role==="camera"){
+    peer.on("connection",conn=>{
+      conn.on("data",msg=>{
+        if(msg!=="REQUEST_VIEW")return;
+        if(approvedViewers.has(conn.peer)){conn.send("APPROVED");if(stream)sendVideo(conn.peer);return}
+        const accepted=window.confirm("A viewer is requesting access to your camera. Allow this viewer?");
+        if(accepted){approvedViewers.add(conn.peer);conn.send("APPROVED");say("Viewer approved. Start the camera when ready.");if(stream)sendVideo(conn.peer)}
+        else{conn.send("DECLINED");conn.close();say("Viewer request declined.")}
       });
-
-      conn.on("data", message => {
-
-        if (message === "START_REQUEST") {
-          status("Viewer connected. Camera owner controls START.");
-        }
-
-        if (message === "STOP") {
-          stopCamera();
-        }
-
-      });
-
-      conn.on("close", () => {
-        connections = connections.filter(c => c !== conn);
-      });
-
+      conn.on("close",()=>approvedViewers.delete(conn.peer));
     });
-
-  }
-
-  if (role === "viewer") {
-
-    peer.on("call", call => {
-
+  }else{
+    peer.on("call",call=>{
+      if(!viewerConn){call.close();return}
       call.answer();
-
-      call.on("stream", remoteStream => {
-
-        const video = document.getElementById("remote");
-        video.srcObject = remoteStream;
-
-        video.play().catch(() => {
-          status("Tap the video to start playback.");
-        });
-
-        status("LIVE - Video connected.");
-
-      });
-
-      call.on("close", () => {
-
-        document.getElementById("remote").srcObject = null;
-        status("Video connection closed.");
-
-      });
-
-      call.on("error", () => {
-        status("Video connection failed.");
-      });
-
-      calls.push(call);
-
+      call.on("stream",remote=>{$("remote").srcObject=remote;$("remote").play().catch(()=>say("Tap the video to play."));say("LIVE — video connected.")});
+      call.on("close",()=>{$("remote").srcObject=null;say("Video ended.")});
+      call.on("error",()=>say("Video connection failed."));
+      activeCalls.push(call);
     });
-
   }
-
 }
-
-function showCamera() {
-
-  currentRole = "camera";
-
-  document.getElementById("camera").classList.remove("hidden");
-  document.getElementById("viewer").classList.add("hidden");
-
-  if (!peer || peer.destroyed) {
-    setupPeer("camera");
-  }
-
+async function startCamera(){
+  if(!peer||!peer.open){say("Wait until your camera code appears.");return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){say("Camera access requires a supported browser and HTTPS.");return}
+  try{if(!stream)stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});$("local").srcObject=stream;say("Camera is live. Approved viewers can see the video.");approvedViewers.forEach(sendVideo)}
+  catch(e){say("Could not start camera: "+e.message)}
 }
-
-function showViewer() {
-
-  currentRole = "viewer";
-
-  document.getElementById("viewer").classList.remove("hidden");
-  document.getElementById("camera").classList.add("hidden");
-
-  if (!peer || peer.destroyed) {
-    setupPeer("viewer");
-  }
-
+function sendVideo(viewerId){
+  if(!stream||!peer||!approvedViewers.has(viewerId))return;
+  activeCalls=activeCalls.filter(c=>{if(c.peer===viewerId){c.close();return false}return true});
+  const call=peer.call(viewerId,stream);if(call){activeCalls.push(call);call.on("error",()=>say("Could not send video. Check the internet connection."))}
 }
-
-async function startCamera() {
-
-  if (!peer || !peer.open) {
-    status("Please wait for your camera code.");
-    return;
-  }
-
-  try {
-
-    if (!stream) {
-
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false
-      });
-
-    }
-
-    document.getElementById("local").srcObject = stream;
-
-    status("Camera LIVE. Sending video to connected viewers.");
-
-    connections.forEach(conn => {
-
-      if (conn.open) {
-        sendVideo(conn.peer);
-      }
-
-    });
-
-  } catch (error) {
-
-    status("Camera error: " + error.message);
-
-  }
-
+function stopCamera(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  activeCalls.forEach(c=>c.close());activeCalls=[];$("local").srcObject=null;say("Camera stopped. Only the camera owner can start or stop it.")
 }
-
-function sendVideo(viewerId) {
-
-  if (!stream || !peer) return;
-
-  calls = calls.filter(call => {
-
-    if (call.peer === viewerId) {
-      call.close();
-      return false;
-    }
-
-    return true;
-
-  });
-
-  const call = peer.call(viewerId, stream);
-
-  if (call) {
-
-    calls.push(call);
-
-    call.on("error", () => {
-      status("Unable to send video. Check internet connection.");
-    });
-
-  }
-
+function connectViewer(){
+  const code=$("code").value.trim();
+  if(!/^\d{6}$/.test(code)){say("Enter a valid six-digit code.");return}
+  if(!peer||!peer.open){say("Wait until the viewer is ready.");return}
+  disconnectViewer(false);
+  viewerConn=peer.connect(code,{reliable:true});
+  viewerConn.on("open",()=>{viewerConn.send("REQUEST_VIEW");say("Request sent. Waiting for camera owner approval…")});
+  viewerConn.on("data",msg=>{if(msg==="APPROVED")say("Approved. Waiting for the camera owner to start the camera…");else if(msg==="DECLINED")say("The camera owner declined the request.")});
+  viewerConn.on("error",()=>say("Could not connect. Check the code and internet connection."));
+  viewerConn.on("close",()=>{viewerConn=null;say("Connection closed.")});
 }
-
-function stopCamera() {
-
-  if (stream) {
-
-    stream.getTracks().forEach(track => track.stop());
-    stream = null;
-
-  }
-
-  calls.forEach(call => call.close());
-  calls = [];
-
-  document.getElementById("local").srcObject = null;
-
-  status("Camera stopped.");
-
+function disconnectViewer(showMessage=true){
+  activeCalls.forEach(c=>c.close());activeCalls=[];if(viewerConn){viewerConn.close();viewerConn=null}
+  $("remote").srcObject=null;if(showMessage)say("Viewer disconnected. The camera device is not stopped.")
 }
-
-function connectCamera() {
-
-  const id = document.getElementById("code").value.trim();
-
-  if (!/^\d{6}$/.test(id)) {
-    status("Please enter the 6-digit camera code.");
-    return;
-  }
-
-  if (!peer || !peer.open) {
-    status("Please wait until viewer is ready.");
-    return;
-  }
-
-  const conn = peer.connect(id);
-
-  connections.push(conn);
-
-  conn.on("open", () => {
-
-    conn.send("START_REQUEST");
-    status("Connected. Waiting for camera owner to start.");
-
-  });
-
-  conn.on("error", () => {
-    status("Could not connect. Check the camera code.");
-  });
-
-  conn.on("close", () => {
-    status("Camera connection closed.");
-  });
-
-}
-
-function requestStop() {
-
-  connections.forEach(conn => {
-
-    if (conn.open) {
-      conn.send("STOP");
-    }
-
-  });
-
-  status("Stop request sent.");
-
-}
-
+$("cameraTab").addEventListener("click",()=>show("camera"));
+$("viewerTab").addEventListener("click",()=>show("viewer"));
+$("start").addEventListener("click",startCamera);
+$("stop").addEventListener("click",stopCamera);
+$("connect").addEventListener("click",connectViewer);
+$("disconnect").addEventListener("click",()=>disconnectViewer());
+window.addEventListener("pagehide",()=>{if(stream)stream.getTracks().forEach(t=>t.stop())});
 </script>
-
 </body>
 </html>
