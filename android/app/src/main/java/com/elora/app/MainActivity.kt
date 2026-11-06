@@ -6,9 +6,11 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.IBinder
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -28,7 +30,30 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private var cameraProvider: ProcessCameraProvider? = null
     private var lensFacing = CameraSelector.LENS_FACING_BACK
     private var receiverRegistered = false
-    private var connection: EloraConnectionController? = null
+    private var connection: EloraConnectionController? = null // viewer-side session
+    private var cameraService: CameraForegroundService? = null
+    private var cameraServiceBound = false
+    private var pendingCameraStart = false
+
+    private val cameraServiceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: android.content.ComponentName?, binder: IBinder?) {
+            val serviceBinder = binder as? CameraForegroundService.LocalBinder ?: return
+            cameraService = serviceBinder.service()
+            cameraServiceBound = true
+            cameraService?.setCallbacks(this@MainActivity)
+            if (pendingCameraStart) {
+                pendingCameraStart = false
+                cameraService?.startCameraRoom(savedSignalingUrl())
+                statusText.text = "Opening private camera room…"
+            }
+        }
+
+        override fun onServiceDisconnected(name: android.content.ComponentName?) {
+            cameraService?.setCallbacks(null)
+            cameraService = null
+            cameraServiceBound = false
+        }
+    }
     private var remoteVideoTrack: org.webrtc.VideoTrack? = null
     private lateinit var roomCodeText: TextView
     private lateinit var codeInput: android.widget.EditText
@@ -40,6 +65,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         override fun onReceive(context: Context?, intent: Intent?) {
             connection?.close()
             connection = null
+            cameraService?.setCallbacks(null)
+            cameraService = null
             stopPreview()
             statusText.text = "Camera stopped."
         }
@@ -173,18 +200,25 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun launchCameraService() {
+        val serverUrl = savedSignalingUrl()
+        if (!serverUrl.startsWith("wss://")) {
+            statusText.text = "Enter a secure ELORA server address first."
+            return
+        }
         val intent = Intent(this, CameraForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
-        if (!savedSignalingUrl().startsWith("wss://")) {
-            statusText.text = "Secure ELORA server is not deployed yet."
-            stopService(intent)
-            return
-        }
         connection?.close()
-        connection = EloraConnectionController(this, savedSignalingUrl(), this)
-        connection?.createCameraRoom()
-        statusText.text = "Opening private camera room…"
+        connection = null
+        pendingCameraStart = true
+        if (cameraServiceBound && cameraService != null) {
+            pendingCameraStart = false
+            cameraService?.setCallbacks(this)
+            cameraService?.startCameraRoom(serverUrl)
+            statusText.text = "Opening private camera room…"
+        } else {
+            bindService(intent, cameraServiceConnection, Context.BIND_AUTO_CREATE)
+        }
     }
 
     private fun startPreview() {
@@ -223,6 +257,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun switchCamera() {
+        if (cameraService != null) { cameraService?.switchCamera(); return }
         if (connection != null) { connection?.switchCamera(); return }
         if (cameraProvider == null) {
             statusText.text = "Start the camera first."
@@ -265,6 +300,14 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         remoteVideoTrack = null
         remoteRenderer.clearImage()
         stopPreview()
+        cameraService?.setCallbacks(null)
+        cameraService?.stopCameraSession()
+        cameraService = null
+        pendingCameraStart = false
+        if (cameraServiceBound) {
+            unbindService(cameraServiceConnection)
+            cameraServiceBound = false
+        }
         stopService(Intent(this, CameraForegroundService::class.java))
         statusText.text = "Disconnected. Camera stopped."
         roomCodeText.text = ""
@@ -321,9 +364,14 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     override fun onDestroy() {
+        // Camera publishing belongs to the foreground service and survives Activity recreation.
         connection?.close()
         connection = null
-        stopService(Intent(this, CameraForegroundService::class.java))
+        cameraService?.setCallbacks(null)
+        if (cameraServiceBound) {
+            unbindService(cameraServiceConnection)
+            cameraServiceBound = false
+        }
         stopPreview()
         remoteVideoTrack?.removeSink(remoteRenderer)
         remoteRenderer.release()
