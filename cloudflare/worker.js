@@ -202,6 +202,7 @@ export class EloraSignaling extends DurableObject {
             send(viewer, "TRUST_CREDENTIAL", { credential, ownerId: room.owner_id, deviceId: v.deviceId });
           }
           send(viewer, "APPROVED");
+          send(ws, "APPROVAL_CONFIRMED", { viewerId: v.viewerId });
         } else {
           send(viewer, "DECLINED");
           viewer.close(1000, "Request declined");
