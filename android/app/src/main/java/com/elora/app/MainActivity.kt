@@ -13,6 +13,7 @@ import android.widget.Toast
 
 class MainActivity : Activity() {
     private val cameraRequest = 41
+    private val notificationRequest = 42
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,6 +58,15 @@ class MainActivity : Activity() {
     }
 
     private fun startCameraService() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), notificationRequest)
+            return
+        }
+        launchCameraService()
+    }
+
+    private fun launchCameraService() {
         val intent = Intent(this, CameraForegroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent)
         else startService(intent)
@@ -70,6 +80,10 @@ class MainActivity : Activity() {
             startCameraService()
         } else if (requestCode == cameraRequest) {
             Toast.makeText(this, "Camera permission is required for ELORA", Toast.LENGTH_LONG).show()
+        } else if (requestCode == notificationRequest) {
+            // Android still keeps foreground-service status visible in system controls if notification
+            // permission is denied, but requesting it allows the ongoing notification in the drawer.
+            launchCameraService()
         }
     }
 }
