@@ -59,7 +59,7 @@ class SignalingClient(
         })
     }
 
-    fun createRoom(): Boolean = send("CREATE_ROOM")
+    fun createRoom(ownerId: String): Boolean = send("CREATE_ROOM", "ownerId" to ownerId)
 
     fun joinRoom(code: String): Boolean {
         if (!code.matches(Regex("\\d{6}"))) return false
