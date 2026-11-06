@@ -32,7 +32,11 @@ class EloraConnectionController(
             connected = true
             callbacks.onStatus("Connected to ELORA signaling.")
             if (ownerMode) signaling.createRoom()
-            else callbacks.onStatus("Joining private room…")
+            else {
+                val code = joinCode
+                if (code != null) signaling.joinRoom(code)
+                else callbacks.onStatus("Enter a room code to join.")
+            }
         }
 
         override fun onDisconnected(reason: String) {
