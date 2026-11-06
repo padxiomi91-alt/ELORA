@@ -27,7 +27,10 @@ class EloraConnectionController(
     private var webRtc: WebRtcSession? = null
     private var connected = false
 
-    private val signaling = SignalingClient(serverUrl, object : SignalingClient.Listener {
+    private lateinit var signaling: SignalingClient
+
+    init {
+        signaling = SignalingClient(serverUrl, object : SignalingClient.Listener {
         override fun onConnected() {
             connected = true
             callbacks.onStatus("Connected to ELORA signaling.")
@@ -71,7 +74,8 @@ class EloraConnectionController(
                 "ERROR" -> callbacks.onStatus(message.optString("message", message.optString("code", "Server error")))
             }
         }
-    })
+        })
+    }
 
     fun createCameraRoom() {
         ownerMode = true
