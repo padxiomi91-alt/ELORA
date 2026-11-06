@@ -193,6 +193,42 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         }
     }
 
+
+    override fun onStatus(message: String) {
+        runOnUiThread { if (::statusText.isInitialized) statusText.text = message }
+    }
+
+    override fun onRoomCode(code: String) {
+        runOnUiThread {
+            statusText.text = "Private room ready. Share this code with your viewer."
+            Toast.makeText(this, "ELORA code: $code", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    override fun onViewerRequest(viewerId: String) {
+        runOnUiThread {
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("New viewer request")
+                .setMessage("Allow this phone to view your camera? Approval trusts this device for future sessions.")
+                .setPositiveButton("APPROVE") { _, _ ->
+                    if (connection?.approvePendingViewer() == true) statusText.text = "Approved. Connecting video…"
+                }
+                .setNegativeButton("DECLINE") { _, _ ->
+                    connection?.declinePendingViewer()
+                    statusText.text = "Viewer request declined."
+                }
+                .show()
+        }
+    }
+
+    override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
+        runOnUiThread {
+            remoteVideoTrack?.let { trackToRemove -> previewView.visibility = android.view.View.VISIBLE }
+            remoteVideoTrack = track
+            statusText.text = "Live video connected."
+        }
+    }
+
     override fun onDestroy() {
         stopPreview()
         if (receiverRegistered) unregisterReceiver(stopReceiver)
