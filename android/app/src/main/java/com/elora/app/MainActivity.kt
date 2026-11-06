@@ -288,10 +288,17 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             statusText.text = "Enter the six-digit code shown on the camera phone."
             return
         }
-        connection?.close()
-        connection = EloraConnectionController(this, savedSignalingUrl(), this)
-        connection?.joinAsViewer(code)
-        statusText.text = "Connecting to camera phone…"
+        try {
+            connection?.close()
+            connection = EloraConnectionController(this, savedSignalingUrl(), this)
+            connection?.joinAsViewer(code)
+            statusText.text = "Connecting to camera phone…"
+        } catch (error: Throwable) {
+            connection?.close()
+            connection = null
+            statusText.text = "Viewer startup failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}"
+            android.util.Log.e("ELORA", "Viewer startup failed", error)
+        }
     }
 
     private fun stopPreview() {
