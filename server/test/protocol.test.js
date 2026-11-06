@@ -62,6 +62,10 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   assert.match(created.code, /^\d{6}$/);
   assert.ok(created.ownerSecret);
 
+  const pongPromise = waitForMessage(owner, "PONG");
+  owner.send(JSON.stringify({ type: "PING" }));
+  await pongPromise;
+
   const viewer = await connect();
   const joinedPromise = waitForMessage(viewer, "JOINED");
   viewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created.code, deviceId: "viewer_device_identity_0001" }));
