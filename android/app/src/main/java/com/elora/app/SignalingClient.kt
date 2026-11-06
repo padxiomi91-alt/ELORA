@@ -84,6 +84,9 @@ class SignalingClient(
     fun closeRoom(ownerSecret: String): Boolean =
         send("CLOSE_ROOM", "ownerSecret" to ownerSecret)
 
+    fun revokeDevice(deviceId: String, ownerSecret: String): Boolean =
+        send("REVOKE_DEVICE", "deviceId" to deviceId, "ownerSecret" to ownerSecret)
+
     private fun send(type: String, vararg fields: Pair<String, Any>): Boolean {
         val message = JSONObject().put("type", type)
         fields.forEach { (key, value) -> message.put(key, value) }
