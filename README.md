@@ -7,7 +7,7 @@ ELORA is a private camera-sharing project. The repository contains:
 
 ## Native Android status
 
-The native app now has a basic camera/viewer screen, six-digit room creation and joining controls, viewer approval/decline, a remote WebRTC video renderer, front/rear camera switching, and a foreground-service notification with a Stop action.
+The native app has a camera/viewer screen, six-digit room creation and joining controls, viewer approval/decline, local and remote WebRTC video rendering, front/rear camera switching, and a camera foreground service. The service owns the camera publishing session so it can continue independently of the Activity, with Android's required camera notification and Stop action.
 
 The Android client creates stable owner and viewer identities and encrypts them, together with trusted-device credentials, using an AES key held by Android Keystore. The signaling protocol supports first-time approval, automatic approval of a previously trusted device, and server-side device revocation. The server stores only credential hashes in its trust store. Protocol tests cover initial approval, trusted reconnection, wrong credentials, and revocation.
 
@@ -18,16 +18,15 @@ A Cloudflare Worker version is provided in `cloudflare/`. Its source and configu
 To deploy it:
 1. Create a Cloudflare API token with Workers Scripts edit permission and note the Cloudflare account ID.
 2. Add GitHub repository Actions secrets named `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-3. Run **Actions → Deploy ELORA signaling backend → Run workflow**.
-4. Copy the deployed Worker hostname. In ELORA on both phones, save its secure WebSocket address, for example `wss://your-worker.your-subdomain.workers.dev`.
+3. For manual deployment, run **Actions → Deploy ELORA signaling backend → Run workflow**.
+4. The Android build already includes the deployed secure WebSocket address; it can also be changed in the app settings if the Worker hostname changes.
 
 The Cloudflare Worker uses Durable Object SQLite storage for trusted-device hashes and room state. Do not share API tokens. Deployment still requires the repository owner’s Cloudflare account credentials.
 
 ## Not yet ready for real-world use
 
-- The signaling server has not been deployed. `ELORA_SIGNALING_URL` in `android/app/build.gradle.kts` is intentionally blank until a secure `wss://` endpoint is available. The native app will not attempt a connection while it is blank.
-- The foreground service currently supplies the Android notification/lifecycle foundation; the WebRTC camera engine is still created by the activity/controller. Streaming with the screen locked has not been verified and must not be treated as complete.
-- No TURN relay is configured. Some mobile networks and NAT combinations may prevent direct WebRTC connections.
+- The foreground service now owns the WebRTC camera session. Streaming with the screen locked still needs physical verification on the target Android phones.
+- No TURN relay is configured yet. STUN-only direct connections may fail on restrictive mobile networks or symmetric NAT; a TURN relay is needed for broader connectivity.
 - The app does not yet expose a trusted-device management screen, although the signaling server and controller include the revocation operation.
 - Physical testing between two Android phones is still required.
 
