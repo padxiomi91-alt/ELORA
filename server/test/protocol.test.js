@@ -65,6 +65,18 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   const request = await requestPromise;
   assert.equal(request.viewerId, joined.viewerId);
 
+  const blockedSignal = waitForMessage(viewer, "ERROR");
+  viewer.send(JSON.stringify({ type: "SIGNAL", payload: { kind: "offer", sdp: "must-not-pass" } }));
+  assert.equal((await blockedSignal).code, "NOT_APPROVED");
+
+  const rejectedApproval = waitForMessage(owner, "ERROR");
+  owner.send(JSON.stringify({
+    type: "APPROVE_VIEWER",
+    viewerId: joined.viewerId,
+    ownerSecret: "incorrect-secret"
+  }));
+  assert.equal((await rejectedApproval).code, "UNAUTHORIZED");
+
   const approvedPromise = waitForMessage(viewer, "APPROVED");
   owner.send(JSON.stringify({
     type: "APPROVE_VIEWER",
