@@ -84,6 +84,7 @@ class EloraConnectionController(
                     val payload = message.optJSONObject("payload")
                     if (payload != null) webRtc?.acceptSignal(payload)
                 }
+                "DEVICE_REVOKED" -> callbacks.onStatus("Trusted device revoked. It must be approved again.")
                 "ROOM_CLOSED" -> callbacks.onStatus("Private room closed.")
                 "PEER_OFFLINE" -> callbacks.onStatus("The other phone is offline.")
                 "ERROR" -> callbacks.onStatus(message.optString("message", message.optString("code", "Server error")))
@@ -142,6 +143,11 @@ class EloraConnectionController(
         val declined = signaling.declineViewer(id, secret)
         if (declined) pendingViewerId = null
         return declined
+    }
+
+    fun revokeTrustedDevice(deviceId: String): Boolean {
+        val secret = ownerSecret ?: return false
+        return signaling.revokeDevice(deviceId, secret)
     }
 
     fun switchCamera() {
