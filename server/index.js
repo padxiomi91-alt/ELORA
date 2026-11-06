@@ -116,6 +116,7 @@ wss.on("connection", (ws, req) => {
         if ([...room.viewers.values()].some(v => v !== viewer && v.approved)) return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
         viewer.approved = true;
         send(ws, "APPROVED", { trusted: true });
+        send(room.owner, "VIEWER_AUTO_APPROVED", { viewerId: ws.viewerId, deviceId: viewer.deviceId });
       } else if (!viewer.requested) {
         viewer.requested = true;
         send(room.owner, "VIEW_REQUEST", { viewerId: ws.viewerId, deviceId: viewer.deviceId, returningDevice: !!record });
