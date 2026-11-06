@@ -121,6 +121,10 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun requestCameraAndStart() {
+        if (!BuildConfig.ELORA_SIGNALING_URL.startsWith("wss://")) {
+            statusText.text = "Secure ELORA server is not deployed yet."
+            return
+        }
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.CAMERA), cameraRequest)
             return
