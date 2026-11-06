@@ -4,7 +4,8 @@ const WebSocket = require("ws");
 
 const PORT = Number(process.env.PORT || 8080);
 const ROOM_TTL_MS = 10 * 60 * 1000;
-const MAX_VIEWERS_PER_ROOM = 3;
+// ELORA's first release allows one private viewer per camera session.
+const MAX_VIEWERS_PER_ROOM = 1;
 const MAX_MESSAGE_BYTES = 64 * 1024;
 const rooms = new Map();
 const attempts = new Map();
@@ -125,7 +126,6 @@ wss.on("connection", (ws, req) => {
       if (ws.role || typeof msg.code !== "string" || !/^\d{6}$/.test(msg.code)) {
         return send(ws, "ERROR", { code: "INVALID_CODE" });
       }
-      if (!rateAllowed(ip)) return send(ws, "ERROR", { code: "RATE_LIMITED" });
       const room = rooms.get(msg.code);
       if (!room || room.expiresAt < Date.now()) {
         if (room) removeRoom(msg.code, "expired");
@@ -154,6 +154,9 @@ wss.on("connection", (ws, req) => {
       if (msg.type === "APPROVE_VIEWER" || msg.type === "DECLINE_VIEWER") {
         const viewer = room.viewers.get(msg.viewerId);
         if (!viewer) return send(ws, "ERROR", { code: "VIEWER_NOT_FOUND" });
+        if (msg.type === "APPROVE_VIEWER" && [...room.viewers.entries()].some(([id, item]) => id !== msg.viewerId && item.approved)) {
+          return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
+        }
         viewer.approved = msg.type === "APPROVE_VIEWER";
         send(viewer.socket, viewer.approved ? "APPROVED" : "DECLINED");
         if (!viewer.approved) {
