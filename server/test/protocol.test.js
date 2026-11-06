@@ -131,6 +131,15 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   const revokePromise = waitForMessage(owner2, "DEVICE_REVOKED");
   owner2.send(JSON.stringify({ type: "REVOKE_DEVICE", deviceId: "viewer_device_identity_0001", ownerSecret: created2.ownerSecret }));
   await revokePromise;
+  const afterRevoke = await connect();
+  const joined4Promise = waitForMessage(afterRevoke, "JOINED");
+  afterRevoke.send(JSON.stringify({ type: "JOIN_ROOM", code: created2.code, deviceId: "viewer_device_identity_0001" }));
+  await joined4Promise;
+  const revokedRequestPromise = waitForMessage(owner2, "VIEW_REQUEST");
+  afterRevoke.send(JSON.stringify({ type: "AUTH_TRUST", trustCredential: trust.credential }));
+  const revokedRequest = await revokedRequestPromise;
+  assert.equal(revokedRequest.returningDevice, false);
   owner2.close();
   untrustedViewer.close();
+  afterRevoke.close();
 });
