@@ -22,6 +22,7 @@
     <p>Share this code only with the person you want to allow.</p>
     <div class="code" id="mycode">------</div>
     <button id="start">START CAMERA</button>
+    <button id="switch" class="secondary">SWITCH FRONT / BACK CAMERA</button>
     <button id="stop" class="secondary">STOP CAMERA</button>
     <video id="local" autoplay muted playsinline></video>
     <p class="note">The camera starts only when you tap START. You approve each viewer request on this device.</p>
@@ -41,7 +42,7 @@
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script>
-let peer=null, stream=null, currentRole="", approvedViewers=new Set(), viewerConn=null, activeCalls=[];
+let peer=null, stream=null, currentRole="", approvedViewers=new Set(), viewerConn=null, activeCalls=[], facingMode="environment";
 const $=id=>document.getElementById(id);
 function say(message){$("status").textContent=message}
 function secureCode(){const a=new Uint32Array(1);crypto.getRandomValues(a);return String(100000+(a[0]%900000))}
@@ -80,8 +81,26 @@ function startPeer(role,preferredCode){
 async function startCamera(){
   if(!peer||!peer.open){say("Wait until your camera code appears.");return}
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){say("Camera access requires a supported browser and HTTPS.");return}
-  try{if(!stream)stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});$("local").srcObject=stream;say("Camera is live. Approved viewers can see the video.");approvedViewers.forEach(sendVideo)}
+  try{if(!stream)stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facingMode}},audio:false});$("local").srcObject=stream;say("Camera is live. Approved viewers can see the video.");approvedViewers.forEach(sendVideo)}
   catch(e){say("Could not start camera: "+e.message)}
+}
+async function switchCamera(){
+  if(!stream){say("Start the camera before switching.");return}
+  const nextFacing=facingMode==="environment"?"user":"environment";
+  try{
+    const nextStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{exact:nextFacing}},audio:false});
+    const oldStream=stream;
+    stream=nextStream;
+    facingMode=nextFacing;
+    $("local").srcObject=stream;
+    oldStream.getTracks().forEach(t=>t.stop());
+    activeCalls.forEach(c=>c.close());
+    activeCalls=[];
+    approvedViewers.forEach(sendVideo);
+    say(facingMode==="user"?"Front camera active.":"Rear camera active.");
+  }catch(e){
+    say("Could not switch camera: "+e.message+". Your current camera remains selected.");
+  }
 }
 function sendVideo(viewerId){
   if(!stream||!peer||!approvedViewers.has(viewerId))return;
@@ -110,6 +129,7 @@ function disconnectViewer(showMessage=true){
 $("cameraTab").addEventListener("click",()=>show("camera"));
 $("viewerTab").addEventListener("click",()=>show("viewer"));
 $("start").addEventListener("click",startCamera);
+$("switch").addEventListener("click",switchCamera);
 $("stop").addEventListener("click",stopCamera);
 $("connect").addEventListener("click",connectViewer);
 $("disconnect").addEventListener("click",()=>disconnectViewer());
