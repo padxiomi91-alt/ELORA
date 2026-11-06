@@ -67,6 +67,9 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             connection = null
             cameraService?.setCallbacks(null)
             cameraService = null
+            remoteVideoTrack?.removeSink(remoteRenderer)
+            remoteVideoTrack = null
+            remoteRenderer.clearImage()
             if (cameraServiceBound) {
                 unbindService(cameraServiceConnection)
                 cameraServiceBound = false
