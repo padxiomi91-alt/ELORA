@@ -83,6 +83,15 @@ class EloraConnectionController(
                     if (message.optBoolean("trusted")) "Trusted device verified. Connecting video…"
                     else "Access approved. Connecting video…"
                 )
+                "APPROVAL_CONFIRMED" -> {
+                    callbacks.onStatus("Owner approval confirmed. Starting video negotiation…")
+                    try {
+                        webRtc?.createOffer()
+                    } catch (error: Throwable) {
+                        callbacks.onStatus("Video offer failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+                        android.util.Log.e("ELORA", "Creating approved viewer offer failed", error)
+                    }
+                }
                 "VIEWER_AUTO_APPROVED" -> {
                     callbacks.onStatus("A previously trusted phone reconnected. Starting video…")
                     webRtc?.createOffer()
@@ -149,15 +158,7 @@ class EloraConnectionController(
         val approved = signaling.approveViewer(id, secret)
         if (approved) {
             pendingViewerId = null
-            // Allow the server to finish applying approval before the SDP offer is sent.
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    webRtc?.createOffer()
-                } catch (error: Throwable) {
-                    callbacks.onStatus("Video offer failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
-                    android.util.Log.e("ELORA", "Creating approved viewer offer failed", error)
-                }
-            }, 250)
+            // The server sends APPROVAL_CONFIRMED after it has approved the viewer.
         }
         return approved
     }
