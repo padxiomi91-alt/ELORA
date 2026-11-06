@@ -90,7 +90,7 @@ wss.on("connection", (ws, req) => {
       return send(ws, "ROOM_CREATED", { code, ownerId, ownerSecret: secret, expiresInSeconds: ROOM_TTL_MS / 1000 });
     }
     if (msg.type === "JOIN_ROOM") {
-      if (ws.role || typeof msg.code !== "string" || !/^\\d{6}$/.test(msg.code)) return send(ws, "ERROR", { code: "INVALID_CODE" });
+      if (ws.role || typeof msg.code !== "string" || !/^\d{6}$/.test(msg.code)) return send(ws, "ERROR", { code: "INVALID_CODE" });
       const room = rooms.get(msg.code);
       if (!room || room.expiresAt < Date.now()) { if (room) removeRoom(msg.code, "expired"); return send(ws, "ERROR", { code: "ROOM_NOT_FOUND" }); }
       if (room.viewers.size >= MAX_VIEWERS_PER_ROOM) return send(ws, "ERROR", { code: "ROOM_FULL" });
