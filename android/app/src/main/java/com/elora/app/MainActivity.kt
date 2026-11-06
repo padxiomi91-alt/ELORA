@@ -359,6 +359,15 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         }
     }
 
+    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
+        runOnUiThread {
+            remoteVideoTrack?.removeSink(remoteRenderer)
+            remoteVideoTrack = track
+            track.addSink(remoteRenderer)
+            statusText.text = "Camera preview active."
+        }
+    }
+
     override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
         runOnUiThread {
             remoteVideoTrack?.removeSink(remoteRenderer)
