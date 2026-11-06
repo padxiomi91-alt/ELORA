@@ -106,6 +106,10 @@ wss.on("connection", (ws, req) => {
     }
     const room = rooms.get(ws.roomCode);
     if (!room) return send(ws, "ERROR", { code: "ROOM_NOT_FOUND" });
+    if (msg.type === "PING") {
+      room.expiresAt = Date.now() + ROOM_TTL_MS;
+      return send(ws, "PONG");
+    }
     if (ws.role === "viewer" && msg.type === "AUTH_TRUST") {
       const viewer = room.viewers.get(ws.viewerId);
       if (!viewer || viewer.approved) return send(ws, "ERROR", { code: "INVALID_PAIRING_STATE" });
