@@ -61,10 +61,13 @@ class SignalingClient(
 
     fun createRoom(ownerId: String): Boolean = send("CREATE_ROOM", "ownerId" to ownerId)
 
-    fun joinRoom(code: String): Boolean {
+    fun joinRoom(code: String, deviceId: String): Boolean {
         if (!code.matches(Regex("\\d{6}"))) return false
-        return send("JOIN_ROOM", "code" to code)
+        return send("JOIN_ROOM", "code" to code, "deviceId" to deviceId)
     }
+
+    fun authenticateTrustedDevice(credential: String?): Boolean =
+        send("AUTH_TRUST", "trustCredential" to (credential ?: ""))
 
     fun approveViewer(viewerId: String, ownerSecret: String): Boolean =
         send("APPROVE_VIEWER", "viewerId" to viewerId, "ownerSecret" to ownerSecret)
