@@ -65,7 +65,7 @@ test("owner creates a room, approves viewer, and relays signaling", async t => {
   const viewer = await connect();
   const joinedPromise = waitForMessage(viewer, "JOINED");
   const requestPromise = waitForMessage(owner, "VIEW_REQUEST");
-  viewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created.code }));
+  viewer.send(JSON.stringify({ type: "JOIN_ROOM", code: created.code, deviceId: "viewer_device_identity_0001" }));
   const joined = await joinedPromise;
   const request = await requestPromise;
   assert.equal(request.viewerId, joined.viewerId);
