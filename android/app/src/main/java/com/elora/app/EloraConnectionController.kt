@@ -21,6 +21,8 @@ class EloraConnectionController(
     }
 
     private val appContext = context.applicationContext
+    private val secureStore = EloraSecureStore(appContext)
+    private var joinedOwnerId: String? = null
     private var ownerMode = false
     private var ownerSecret: String? = null
     private var pendingViewerId: String? = null
@@ -34,10 +36,10 @@ class EloraConnectionController(
         override fun onConnected() {
             connected = true
             callbacks.onStatus("Connected to ELORA signaling.")
-            if (ownerMode) signaling.createRoom()
+            if (ownerMode) signaling.createRoom(secureStore.ownerId())
             else {
                 val code = joinCode
-                if (code != null) signaling.joinRoom(code)
+                if (code != null) signaling.joinRoom(code, secureStore.deviceId())
                 else callbacks.onStatus("Enter a room code to join.")
             }
         }
@@ -58,7 +60,20 @@ class EloraConnectionController(
                     callbacks.onRoomCode(message.optString("code"))
                     callbacks.onStatus("Private room ready. Waiting for viewer.")
                 }
-                "JOINED" -> callbacks.onStatus("Request sent. Waiting for camera owner approval.")
+                "JOINED" -> {
+                    joinedOwnerId = message.optString("ownerId").takeIf { it.isNotBlank() }
+                    val credential = joinedOwnerId?.let { secureStore.trustCredential(it) }
+                    signaling.authenticateTrustedDevice(credential)
+                    callbacks.onStatus(if (credential == null) "First-time pairing. Waiting for camera owner approval." else "Checking this trusted device…")
+                }
+                "TRUST_CREDENTIAL" -> {
+                    val ownerId = message.optString("ownerId")
+                    val credential = message.optString("credential")
+                    if (ownerId.isNotBlank() && credential.isNotBlank()) {
+                        secureStore.saveTrustCredential(ownerId, credential)
+                        callbacks.onStatus("This phone is now trusted. Future connections won't need approval.")
+                    }
+                }
                 "VIEW_REQUEST" -> {
                     pendingViewerId = message.optString("viewerId")
                     callbacks.onViewerRequest(pendingViewerId!!)
@@ -104,9 +119,8 @@ class EloraConnectionController(
             { status -> callbacks.onStatus(status) },
             { track -> callbacks.onRemoteVideo(track) }
         )
-        signaling.connect()
-        // JOIN_ROOM is sent after the socket opens by the small deferred flag below.
         joinCode = code
+        signaling.connect()
     }
 
     private var joinCode: String? = null
@@ -143,6 +157,7 @@ class EloraConnectionController(
         ownerSecret = null
         pendingViewerId = null
         joinCode = null
+        joinedOwnerId = null
         connected = false
     }
 }
