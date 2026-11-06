@@ -224,9 +224,15 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     private fun stopCamera() {
+        connection?.close()
+        connection = null
+        remoteVideoTrack?.removeSink(remoteRenderer)
+        remoteVideoTrack = null
+        remoteRenderer.clearImage()
         stopPreview()
         stopService(Intent(this, CameraForegroundService::class.java))
-        statusText.text = "Camera stopped. ELORA notification removed."
+        statusText.text = "Disconnected. Camera stopped."
+        roomCodeText.text = ""
     }
 
     override fun onRequestPermissionsResult(
