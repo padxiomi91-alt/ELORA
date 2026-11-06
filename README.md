@@ -11,6 +11,18 @@ The native app now has a basic camera/viewer screen, six-digit room creation and
 
 The Android client creates stable owner and viewer identities and encrypts them, together with trusted-device credentials, using an AES key held by Android Keystore. The signaling protocol supports first-time approval, automatic approval of a previously trusted device, and server-side device revocation. The server stores only credential hashes in its trust store. Protocol tests cover initial approval, trusted reconnection, wrong credentials, and revocation.
 
+## Signaling backend deployment
+
+A Cloudflare Worker version is provided in `cloudflare/`. Its source and configuration pass the Wrangler dry-run validation workflow.
+
+To deploy it:
+1. Create a Cloudflare API token with Workers Scripts edit permission and note the Cloudflare account ID.
+2. Add GitHub repository Actions secrets named `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+3. Run **Actions → Deploy ELORA signaling backend → Run workflow**.
+4. Copy the deployed Worker hostname. In ELORA on both phones, save its secure WebSocket address, for example `wss://your-worker.your-subdomain.workers.dev`.
+
+The Cloudflare Worker uses Durable Object SQLite storage for trusted-device hashes and room state. Do not share API tokens. Deployment still requires the repository owner’s Cloudflare account credentials.
+
 ## Not yet ready for real-world use
 
 - The signaling server has not been deployed. `ELORA_SIGNALING_URL` in `android/app/build.gradle.kts` is intentionally blank until a secure `wss://` endpoint is available. The native app will not attempt a connection while it is blank.
