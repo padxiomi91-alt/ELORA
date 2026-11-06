@@ -54,15 +54,19 @@ class SignalingClient(
         val request = Request.Builder().url(serverUrl).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                startHeartbeat()
-                listener.onConnected()
+                try {
+                    startHeartbeat()
+                    listener.onConnected()
+                } catch (error: Throwable) {
+                    listener.onFailure("ELORA connection startup failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown"}")
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     listener.onMessage(JSONObject(text))
-                } catch (_: Exception) {
-                    listener.onFailure("Received an invalid server message.")
+                } catch (error: Throwable) {
+                    listener.onFailure("ELORA message handling failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "invalid server message"}")
                 }
             }
 
@@ -73,7 +77,7 @@ class SignalingClient(
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 stopHeartbeat()
-                listener.onFailure(t.localizedMessage ?: "Signaling connection failed.")
+                listener.onFailure("Signaling connection failed: ${t.javaClass.simpleName}: ${t.localizedMessage ?: "unknown error"}")
             }
         })
     }
