@@ -127,6 +127,7 @@ class EloraConnectionController(
             false,
             { payload -> signaling.sendSignal(payload) },
             { status -> callbacks.onStatus(status) },
+            { _ -> },
             { track -> callbacks.onRemoteVideo(track) }
         )
         joinCode = code
