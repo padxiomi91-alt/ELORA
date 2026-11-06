@@ -90,7 +90,14 @@ class EloraConnectionController(
                 "DECLINED" -> callbacks.onStatus("Camera owner declined the request.")
                 "SIGNAL" -> {
                     val payload = message.optJSONObject("payload")
-                    if (payload != null) webRtc?.acceptSignal(payload)
+                    if (payload != null) {
+                        try {
+                            webRtc?.acceptSignal(payload)
+                        } catch (error: Throwable) {
+                            callbacks.onStatus("Video negotiation failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+                            android.util.Log.e("ELORA", "Incoming WebRTC signal failed", error)
+                        }
+                    }
                 }
                 "DEVICE_REVOKED" -> callbacks.onStatus("Trusted device revoked. It must be approved again.")
                 "ROOM_CLOSED" -> callbacks.onStatus("Private room closed.")
@@ -142,7 +149,15 @@ class EloraConnectionController(
         val approved = signaling.approveViewer(id, secret)
         if (approved) {
             pendingViewerId = null
-            webRtc?.createOffer()
+            // Allow the server to finish applying approval before the SDP offer is sent.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    webRtc?.createOffer()
+                } catch (error: Throwable) {
+                    callbacks.onStatus("Video offer failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+                    android.util.Log.e("ELORA", "Creating approved viewer offer failed", error)
+                }
+            }, 250)
         }
         return approved
     }
