@@ -144,6 +144,13 @@ export class EloraSignaling extends DurableObject {
       return send(ws, "ERROR", { code: "ROOM_NOT_FOUND" });
     }
 
+    if (msg.type === "PING") {
+      const expiresAt = Date.now() + ROOM_TTL;
+      this.ctx.storage.sql.exec("UPDATE rooms SET expires_at = ? WHERE code = ?", expiresAt, room.code);
+      await this.ctx.storage.setAlarm(expiresAt);
+      return send(ws, "PONG");
+    }
+
     if (a.role === "viewer" && msg.type === "AUTH_TRUST") {
       if (a.approved) return send(ws, "ERROR", { code: "INVALID_PAIRING_STATE" });
       const record = a.deviceId ? this.ctx.storage.sql.exec(
