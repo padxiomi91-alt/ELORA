@@ -255,8 +255,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRoomCode(code: String) {
         runOnUiThread {
-            statusText.text = "Private room ready. Share this code with your viewer."
-            Toast.makeText(this, "ELORA code: $code", Toast.LENGTH_LONG).show()
+            roomCodeText.text = "PRIVATE CODE\\n$code"
+            statusText.text = "Share this code only with the phone you trust."
         }
     }
 
@@ -278,14 +278,18 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
         runOnUiThread {
-            remoteVideoTrack?.let { trackToRemove -> previewView.visibility = android.view.View.VISIBLE }
+            remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = track
+            track.addSink(remoteRenderer)
             statusText.text = "Live video connected."
         }
     }
 
     override fun onDestroy() {
         stopPreview()
+        remoteVideoTrack?.removeSink(remoteRenderer)
+        remoteRenderer.release()
+        rendererEgl?.release()
         if (receiverRegistered) unregisterReceiver(stopReceiver)
         super.onDestroy()
     }
