@@ -15,6 +15,7 @@ class CameraForegroundService : Service() {
         private const val CHANNEL_ID = "elora_camera"
         private const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.elora.app.STOP_CAMERA"
+        const val ACTION_CAMERA_STOPPED = "com.elora.app.CAMERA_STOPPED"
     }
 
     override fun onCreate() {
@@ -93,7 +94,7 @@ class CameraForegroundService : Service() {
     }
 
     private fun stopCameraService() {
-        // Stop the camera/WebRTC tracks here when the native streaming engine is added.
+        sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -101,6 +102,7 @@ class CameraForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
         stopForeground(STOP_FOREGROUND_REMOVE)
         super.onDestroy()
     }
