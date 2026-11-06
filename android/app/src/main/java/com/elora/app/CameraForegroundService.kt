@@ -95,6 +95,10 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         activityCallbacks?.onViewerRequest(viewerId)
     }
 
+    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
+        activityCallbacks?.onLocalVideo(track)
+    }
+
     override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
         activityCallbacks?.onRemoteVideo(track)
     }
