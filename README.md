@@ -6,9 +6,9 @@ ELORA is a private camera-sharing project. The repository currently contains:
 
 ## Native Android progress
 
-The Android app now has a CameraX local preview, front/rear camera switching, and an ongoing foreground-service notification with a Stop action. Stopping from the app or its notification removes the notification and closes the local preview.
+The Android app has a CameraX local preview, front/rear camera switching, an ongoing foreground-service notification with a Stop action, and a reusable WebSocket signaling client. The signaling client understands ELORA room creation, six-digit room joining, owner approval, and signaling-message transport. The server currently allows one viewer per camera session.
 
-**Important:** Native peer-to-peer live streaming, secure device pairing, and continued camera capture while the screen is locked are not implemented yet. The current Android build is a development foundation, not a finished remote-viewing app. Android's camera privacy indicator and required foreground-service status remain visible while camera access is active.
+**Important:** The signaling server is not deployed, and the Android signaling client is not yet connected to the app's screens. WebRTC media streaming, production-grade pairing, and continued camera capture while the screen is locked are not implemented yet. The current Android build is a development foundation, not a finished remote-viewing app. Android's camera privacy indicator and required foreground-service status remain visible while camera access is active.
 
 ## Android APK build
 
