@@ -22,3 +22,8 @@ jobs:
       - name: Validate Worker bundle
         working-directory: cloudflare
         run: npx --yes wrangler@4 deploy --dry-run --outdir=./.worker-build
+      - name: Check deployed signaling health
+        run: |
+          response="$(curl --fail --silent --show-error --retry 8 --retry-delay 2 --retry-connrefused https://elora-signaling.padxiomi91.workers.dev/health)"
+          echo "$response"
+          echo "$response" | grep -F '"status":"ok"'
