@@ -29,9 +29,9 @@ object EloraDiagnostics {
                     if (error != null) {
                         append(" | ").append(error.javaClass.name).append(": ")
                         append((error.localizedMessage ?: "no message").replace(Regex("[\\r\\n]"), " "))
-                        error.stackTrace.take(12).forEach { append("\\n  at ").append(it) }
+                        error.stackTrace.take(12).forEach { append("\n  at ").append(it) }
                     }
-                    append("\\n")
+                    append("\n")
                 }
                 file.appendText(detail)
                 if (file.length() > 100_000L) {
