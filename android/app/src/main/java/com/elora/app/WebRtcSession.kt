@@ -18,6 +18,9 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native WebRTC peer for ELORA.
@@ -56,7 +59,19 @@ class WebRtcSession(
     private var localTrack: VideoTrack? = null
     private var remoteDescriptionSet = false
     private val pendingCandidates = mutableListOf<IceCandidate>()
-    private var closed = false
+    private val closed = AtomicBoolean(false)
+    private val peerOperations = Executors.newSingleThreadExecutor { task ->
+        Thread(task, "ELORA-WebRTC").apply { isDaemon = true }
+    }
+
+    private fun dispatchPeerOperation(operation: () -> Unit) {
+        if (closed.get()) return
+        try {
+            peerOperations.execute { if (!closed.get()) operation() }
+        } catch (_: RejectedExecutionException) {
+            // Ignore late callbacks after the session has closed.
+        }
+    }
 
     init {
         EloraDiagnostics.record(if (publishCamera) "WebRTC publisher initialization started" else "WebRTC viewer initialization started")
@@ -130,18 +145,20 @@ class WebRtcSession(
         }
     }
 
-    fun createOffer() {
+    fun createOffer() = dispatchPeerOperation {
         EloraDiagnostics.record("WebRTC createOffer called")
         peer.createOffer(object : SdpObserver {
             override fun onCreateSuccess(description: SessionDescription) {
-                peer.setLocalDescription(object : SdpObserver {
-                    override fun onSetSuccess() {
-                        onSignal(JSONObject().put("kind", "offer").put("sdp", description.description))
-                    }
-                    override fun onSetFailure(error: String) { onStatus("Offer setup failed: $error") }
-                    override fun onCreateSuccess(description: SessionDescription) {}
-                    override fun onCreateFailure(error: String) {}
-                }, description)
+                dispatchPeerOperation {
+                    peer.setLocalDescription(object : SdpObserver {
+                        override fun onSetSuccess() {
+                            if (!closed.get()) onSignal(JSONObject().put("kind", "offer").put("sdp", description.description))
+                        }
+                        override fun onSetFailure(error: String) { if (!closed.get()) onStatus("Offer setup failed: $error") }
+                        override fun onCreateSuccess(description: SessionDescription) {}
+                        override fun onCreateFailure(error: String) {}
+                    }, description)
+                }
             }
             override fun onSetSuccess() {}
             override fun onCreateFailure(error: String) {
@@ -152,30 +169,34 @@ class WebRtcSession(
         }, MediaConstraints())
     }
 
-    fun acceptSignal(message: JSONObject) {
+    fun acceptSignal(message: JSONObject) = dispatchPeerOperation {
         EloraDiagnostics.record("WebRTC signal received: " + message.optString("kind"))
         when (message.optString("kind")) {
             "offer" -> {
                 val description = SessionDescription(SessionDescription.Type.OFFER, message.getString("sdp"))
                 peer.setRemoteDescription(object : SdpObserver {
                     override fun onSetSuccess() {
-                        remoteDescriptionSet = true
-                        flushCandidates()
-                        peer.createAnswer(object : SdpObserver {
-                            override fun onCreateSuccess(answer: SessionDescription) {
-                                peer.setLocalDescription(object : SdpObserver {
-                                    override fun onSetSuccess() {
-                                        onSignal(JSONObject().put("kind", "answer").put("sdp", answer.description))
+                        dispatchPeerOperation {
+                            remoteDescriptionSet = true
+                            flushCandidates()
+                            peer.createAnswer(object : SdpObserver {
+                                override fun onCreateSuccess(answer: SessionDescription) {
+                                    dispatchPeerOperation {
+                                        peer.setLocalDescription(object : SdpObserver {
+                                            override fun onSetSuccess() {
+                                                if (!closed.get()) onSignal(JSONObject().put("kind", "answer").put("sdp", answer.description))
+                                            }
+                                            override fun onSetFailure(error: String) { if (!closed.get()) onStatus("Answer setup failed: $error") }
+                                            override fun onCreateSuccess(description: SessionDescription) {}
+                                            override fun onCreateFailure(error: String) {}
+                                        }, answer)
                                     }
-                                    override fun onSetFailure(error: String) { onStatus("Answer setup failed: $error") }
-                                    override fun onCreateSuccess(description: SessionDescription) {}
-                                    override fun onCreateFailure(error: String) {}
-                                }, answer)
-                            }
-                            override fun onSetSuccess() {}
-                            override fun onCreateFailure(error: String) { onStatus("Answer failed: $error") }
-                            override fun onSetFailure(error: String) {}
-                        }, MediaConstraints())
+                                }
+                                override fun onSetSuccess() {}
+                                override fun onCreateFailure(error: String) { if (!closed.get()) onStatus("Answer failed: $error") }
+                                override fun onSetFailure(error: String) {}
+                            }, MediaConstraints())
+                        }
                     }
                     override fun onSetFailure(error: String) { onStatus("Offer rejected: $error") }
                     override fun onCreateSuccess(description: SessionDescription) {}
@@ -186,9 +207,11 @@ class WebRtcSession(
                 val description = SessionDescription(SessionDescription.Type.ANSWER, message.getString("sdp"))
                 peer.setRemoteDescription(object : SdpObserver {
                     override fun onSetSuccess() {
-                        remoteDescriptionSet = true
-                        flushCandidates()
-                        onStatus("Remote answer received.")
+                        dispatchPeerOperation {
+                            remoteDescriptionSet = true
+                            flushCandidates()
+                            onStatus("Remote answer received.")
+                        }
                     }
                     override fun onSetFailure(error: String) { onStatus("Answer rejected: $error") }
                     override fun onCreateSuccess(description: SessionDescription) {}
@@ -212,23 +235,27 @@ class WebRtcSession(
         pendingCandidates.clear()
     }
 
-    fun switchCamera() {
-        capturer?.switchCamera(null)
-    }
+    fun switchCamera() = dispatchPeerOperation { capturer?.switchCamera(null) }
 
     fun close() {
-        if (closed) return
+        if (!closed.compareAndSet(false, true)) return
         EloraDiagnostics.record("WebRTC session closing; publisher=$publishCamera")
-        closed = true
-        try { capturer?.stopCapture() } catch (_: Exception) {}
-        capturer?.dispose()
-        localTrack?.dispose()
-        videoSource?.dispose()
-        textureHelper?.dispose()
-        peer.close()
-        peer.dispose()
-        factory.dispose()
-        egl.release()
-        onStatus("WebRTC session closed.")
+        try {
+            peerOperations.execute {
+                try { capturer?.stopCapture() } catch (_: Exception) {}
+                capturer?.dispose()
+                localTrack?.dispose()
+                videoSource?.dispose()
+                textureHelper?.dispose()
+                peer.close()
+                peer.dispose()
+                factory.dispose()
+                egl.release()
+                onStatus("WebRTC session closed.")
+                peerOperations.shutdown()
+            }
+        } catch (_: RejectedExecutionException) {
+            peerOperations.shutdown()
+        }
     }
 }
