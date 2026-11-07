@@ -59,6 +59,7 @@ class WebRtcSession(
     private var closed = false
 
     init {
+        EloraDiagnostics.record(if (publishCamera) "WebRTC publisher initialization started" else "WebRTC viewer initialization started")
         EloraWebRtcRuntime.initialize(appContext)
         factory = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
@@ -73,6 +74,7 @@ class WebRtcSession(
             object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState) {}
                 override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
+                    EloraDiagnostics.record("ICE connection state: " + state.name)
                     onStatus("Connection: " + state.name)
                 }
                 override fun onIceConnectionReceivingChange(receiving: Boolean) {}
@@ -108,7 +110,9 @@ class WebRtcSession(
                 ?: error("Could not create camera texture")
             val source = factory.createVideoSource(false)
             camera.initialize(texture, appContext, source.capturerObserver)
+            EloraDiagnostics.record("Starting camera capture 1280x720@24")
             camera.startCapture(1280, 720, 24)
+            EloraDiagnostics.record("Camera capture started")
             val track = factory.createVideoTrack("ELORA_VIDEO", source)
             peer.addTrack(track, listOf("ELORA_STREAM"))
             capturer = camera
@@ -127,6 +131,7 @@ class WebRtcSession(
     }
 
     fun createOffer() {
+        EloraDiagnostics.record("WebRTC createOffer called")
         peer.createOffer(object : SdpObserver {
             override fun onCreateSuccess(description: SessionDescription) {
                 peer.setLocalDescription(object : SdpObserver {
@@ -139,12 +144,16 @@ class WebRtcSession(
                 }, description)
             }
             override fun onSetSuccess() {}
-            override fun onCreateFailure(error: String) { onStatus("Offer failed: $error") }
+            override fun onCreateFailure(error: String) {
+                EloraDiagnostics.record("WebRTC offer creation callback failed: $error")
+                onStatus("Offer failed: $error")
+            }
             override fun onSetFailure(error: String) {}
         }, MediaConstraints())
     }
 
     fun acceptSignal(message: JSONObject) {
+        EloraDiagnostics.record("WebRTC signal received: " + message.optString("kind"))
         when (message.optString("kind")) {
             "offer" -> {
                 val description = SessionDescription(SessionDescription.Type.OFFER, message.getString("sdp"))
@@ -209,6 +218,7 @@ class WebRtcSession(
 
     fun close() {
         if (closed) return
+        EloraDiagnostics.record("WebRTC session closing; publisher=$publishCamera")
         closed = true
         try { capturer?.stopCapture() } catch (_: Exception) {}
         capturer?.dispose()
