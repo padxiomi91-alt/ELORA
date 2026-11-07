@@ -81,6 +81,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        EloraDiagnostics.record("MainActivity created")
 
         val title = TextView(this).apply {
             text = "ELORA"
@@ -140,6 +141,15 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             text = "STOP / DISCONNECT"
             setOnClickListener { stopCamera() }
         }
+        val diagnostics = Button(this).apply {
+            text = "COPY DIAGNOSTICS"
+            setOnClickListener {
+                val report = EloraDiagnostics.read(this@MainActivity)
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("ELORA diagnostics", report))
+                Toast.makeText(this@MainActivity, "Diagnostics copied. Share them with support.", Toast.LENGTH_LONG).show()
+            }
+        }
 
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -156,6 +166,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             addView(join)
             addView(switch)
             addView(stop)
+            addView(diagnostics)
         })
 
         val filter = IntentFilter(CameraForegroundService.ACTION_CAMERA_STOPPED)
@@ -353,11 +364,13 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     override fun onViewerRequest(viewerId: String) {
+        EloraDiagnostics.record("Viewer approval prompt received")
         runOnUiThread {
             androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("New viewer request")
                 .setMessage("Allow this phone to view your camera? Approval trusts this device for future sessions.")
                 .setPositiveButton("APPROVE") { _, _ ->
+                    EloraDiagnostics.record("Owner tapped approve")
                     val approved = cameraService?.approvePendingViewer() ?: (connection?.approvePendingViewer() == true)
                     if (approved) statusText.text = "Approved. Connecting video…"
                 }
@@ -388,6 +401,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     }
 
     override fun onDestroy() {
+        EloraDiagnostics.record("MainActivity destroyed")
         // Camera publishing belongs to the foreground service and survives Activity recreation.
         connection?.close()
         connection = null
