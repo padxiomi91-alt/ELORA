@@ -34,6 +34,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
 
     override fun onCreate() {
         super.onCreate()
+        EloraDiagnostics.record("Camera service created")
         createNotificationChannel()
     }
 
@@ -43,9 +44,11 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
             return START_NOT_STICKY
         }
 
+        EloraDiagnostics.record("Camera service start command received")
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA)
+            EloraDiagnostics.record("Camera foreground mode started")
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -59,11 +62,13 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     }
 
     fun startCameraRoom(serverUrl: String) {
+        EloraDiagnostics.record("Camera room startup requested")
         try {
             controller?.close()
             controller = EloraConnectionController(applicationContext, serverUrl, this)
             controller?.createCameraRoom()
         } catch (error: Throwable) {
+            EloraDiagnostics.record("Camera room startup failed", error)
             android.util.Log.e("ELORA", "Camera startup failed", error)
             try { controller?.close() } catch (cleanupError: Throwable) {
                 android.util.Log.e("ELORA", "Camera startup cleanup failed", cleanupError)
@@ -84,6 +89,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     fun declinePendingViewer(): Boolean = controller?.declinePendingViewer() == true
 
     fun stopCameraSession() {
+        EloraDiagnostics.record("Camera session stop requested")
         controller?.close()
         controller = null
         if (!stopBroadcastSent) {
@@ -158,6 +164,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     }
 
     override fun onDestroy() {
+        EloraDiagnostics.record("Camera service destroyed")
         controller?.close()
         controller = null
         if (!stopBroadcastSent) {
