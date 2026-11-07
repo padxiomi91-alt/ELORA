@@ -46,15 +46,18 @@ class EloraConnectionController(
         }
 
         override fun onDisconnected(reason: String) {
+            EloraDiagnostics.record("Signaling disconnected: $reason")
             connected = false
             callbacks.onStatus("Disconnected: $reason")
         }
 
         override fun onFailure(error: String) {
+            EloraDiagnostics.record("Signaling failure: $error")
             callbacks.onStatus(error)
         }
 
         override fun onMessage(message: JSONObject) {
+            EloraDiagnostics.record("Signaling message: " + message.optString("type"))
             when (message.optString("type")) {
                 "ROOM_CREATED" -> {
                     ownerSecret = message.optString("ownerSecret")
@@ -84,6 +87,7 @@ class EloraConnectionController(
                     else "Access approved. Connecting video…"
                 )
                 "APPROVAL_CONFIRMED" -> {
+                    EloraDiagnostics.record("Approval confirmed; creating publisher offer")
                     callbacks.onStatus("Owner approval confirmed. Starting video negotiation…")
                     try {
                         webRtc?.createOffer()
@@ -93,6 +97,7 @@ class EloraConnectionController(
                     }
                 }
                 "VIEWER_AUTO_APPROVED" -> {
+                    EloraDiagnostics.record("Trusted viewer auto-approved; creating publisher offer")
                     callbacks.onStatus("A previously trusted phone reconnected. Starting video…")
                     webRtc?.createOffer()
                 }
@@ -118,6 +123,7 @@ class EloraConnectionController(
     }
 
     fun createCameraRoom() {
+        EloraDiagnostics.record("Creating camera publisher session")
         ownerMode = true
         webRtc?.close()
         webRtc = WebRtcSession(
@@ -153,6 +159,7 @@ class EloraConnectionController(
     private var joinCode: String? = null
 
     fun approvePendingViewer(): Boolean {
+        EloraDiagnostics.record("Approve viewer action requested")
         val id = pendingViewerId ?: return false
         val secret = ownerSecret ?: return false
         val approved = signaling.approveViewer(id, secret)
@@ -181,6 +188,7 @@ class EloraConnectionController(
     }
 
     fun close() {
+        EloraDiagnostics.record("Connection controller closing; ownerMode=$ownerMode")
         val secret = ownerSecret
         if (ownerMode && secret != null) signaling.closeRoom(secret)
         webRtc?.close()
