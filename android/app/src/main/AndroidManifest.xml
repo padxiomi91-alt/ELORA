@@ -9,6 +9,7 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
 
     <application
+        android:name=".EloraApplication"
         android:allowBackup="false"
         android:label="ELORA"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
