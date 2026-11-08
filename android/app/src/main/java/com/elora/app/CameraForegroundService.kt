@@ -31,6 +31,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     private var controller: EloraConnectionController? = null
     @Volatile private var activityCallbacks: EloraConnectionController.Callbacks? = null
     private var stopBroadcastSent = false
+    @Volatile private var activeServerUrl: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -61,12 +62,23 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         activityCallbacks = callbacks
     }
 
+    @Synchronized
     fun startCameraRoom(serverUrl: String) {
         EloraDiagnostics.record("Camera room startup requested")
+        // Activity recreation/rebinding can request startup more than once.
+        // Keep the existing publisher alive while a viewer is negotiating.
+        if (controller != null && activeServerUrl == serverUrl) {
+            EloraDiagnostics.record("Camera room already active; duplicate startup ignored")
+            return
+        }
         try {
             controller?.close()
-            controller = EloraConnectionController(applicationContext, serverUrl, this)
-            controller?.createCameraRoom()
+            controller = null
+            activeServerUrl = null
+            val newController = EloraConnectionController(applicationContext, serverUrl, this)
+            controller = newController
+            activeServerUrl = serverUrl
+            newController.createCameraRoom()
         } catch (error: Throwable) {
             EloraDiagnostics.record("Camera room startup failed", error)
             android.util.Log.e("ELORA", "Camera startup failed", error)
@@ -74,6 +86,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
                 android.util.Log.e("ELORA", "Camera startup cleanup failed", cleanupError)
             }
             controller = null
+            activeServerUrl = null
             onStatus("Camera startup failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
@@ -92,6 +105,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         EloraDiagnostics.record("Camera session stop requested")
         controller?.close()
         controller = null
+        activeServerUrl = null
         if (!stopBroadcastSent) {
             stopBroadcastSent = true
             sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
@@ -167,6 +181,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         EloraDiagnostics.record("Camera service destroyed")
         controller?.close()
         controller = null
+        activeServerUrl = null
         if (!stopBroadcastSent) {
             sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
         }
