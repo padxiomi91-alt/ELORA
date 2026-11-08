@@ -238,7 +238,7 @@ class WebRtcSession(
         if (!closed.compareAndSet(false, true)) return
         EloraDiagnostics.record("WebRTC session closing; publisher=$publishCamera")
         // Dispose on the same thread used for peer creation and all peer operations.
-        peerHandler.post {
+        val cleanup = Runnable {
             try { capturer?.stopCapture() } catch (_: Exception) {}
             try { capturer?.dispose() } catch (_: Exception) {}
             try { localTrack?.dispose() } catch (_: Exception) {}
@@ -250,5 +250,7 @@ class WebRtcSession(
             try { egl.release() } catch (_: Exception) {}
             onStatus("WebRTC session closed.")
         }
+        if (Looper.myLooper() == Looper.getMainLooper()) cleanup.run()
+        else peerHandler.post(cleanup)
     }
 }
