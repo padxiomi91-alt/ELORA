@@ -60,6 +60,9 @@ class WebRtcSession(
     private var remoteDescriptionSet = false
     private val pendingCandidates = mutableListOf<IceCandidate>()
     private val closed = AtomicBoolean(false)
+    private val offerStarted = AtomicBoolean(false)
+    private val answerStarted = AtomicBoolean(false)
+    private val remoteOfferAccepted = AtomicBoolean(false)
     // Android WebRTC's PeerConnection API is driven from one consistent thread.
     // Use the main looper (also used to construct the peer) instead of a private
     // executor, which can violate native signaling-thread affinity on some builds.
@@ -143,6 +146,10 @@ class WebRtcSession(
     }
 
     fun createOffer() = dispatchPeerOperation {
+        if (!offerStarted.compareAndSet(false, true)) {
+            EloraDiagnostics.record("Duplicate WebRTC offer request ignored")
+            return@dispatchPeerOperation
+        }
         EloraDiagnostics.record("WebRTC createOffer called")
         peer.createOffer(object : SdpObserver {
             override fun onCreateSuccess(description: SessionDescription) {
@@ -170,12 +177,17 @@ class WebRtcSession(
         EloraDiagnostics.record("WebRTC signal received: " + message.optString("kind"))
         when (message.optString("kind")) {
             "offer" -> {
+                if (!remoteOfferAccepted.compareAndSet(false, true)) {
+                    EloraDiagnostics.record("Duplicate remote offer ignored")
+                    return@dispatchPeerOperation
+                }
                 val description = SessionDescription(SessionDescription.Type.OFFER, message.getString("sdp"))
                 peer.setRemoteDescription(object : SdpObserver {
                     override fun onSetSuccess() {
                         dispatchPeerOperation {
                             remoteDescriptionSet = true
                             flushCandidates()
+                            if (!answerStarted.compareAndSet(false, true)) return@dispatchPeerOperation
                             peer.createAnswer(object : SdpObserver {
                                 override fun onCreateSuccess(answer: SessionDescription) {
                                     dispatchPeerOperation {
