@@ -10,6 +10,11 @@ on:
 permissions:
   contents: write
 
+# Serialize builds so only one job initializes/caches the persistent debug key.
+concurrency:
+  group: elora-android-apk
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,6 +27,24 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
+
+      - name: Restore persistent ELORA debug signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: elora-debug-signing-v1
+
+      - name: Create persistent debug signing key if missing
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v \
+              -keystore ~/.android/debug.keystore \
+              -storepass android -keypass android \
+              -alias androiddebugkey \
+              -dname "CN=ELORA Debug,O=ELORA,C=IN" \
+              -keyalg RSA -keysize 2048 -validity 10000
+          fi
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
