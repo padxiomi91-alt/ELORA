@@ -18,8 +18,8 @@ import org.webrtc.SessionDescription
 import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
-import java.util.concurrent.Executors
-import java.util.concurrent.RejectedExecutionException
+import android.os.Handler
+import android.os.Looper
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -60,17 +60,14 @@ class WebRtcSession(
     private var remoteDescriptionSet = false
     private val pendingCandidates = mutableListOf<IceCandidate>()
     private val closed = AtomicBoolean(false)
-    private val peerOperations = Executors.newSingleThreadExecutor { task ->
-        Thread(task, "ELORA-WebRTC").apply { isDaemon = true }
-    }
+    // Android WebRTC's PeerConnection API is driven from one consistent thread.
+    // Use the main looper (also used to construct the peer) instead of a private
+    // executor, which can violate native signaling-thread affinity on some builds.
+    private val peerHandler = Handler(Looper.getMainLooper())
 
     private fun dispatchPeerOperation(operation: () -> Unit) {
         if (closed.get()) return
-        try {
-            peerOperations.execute { if (!closed.get()) operation() }
-        } catch (_: RejectedExecutionException) {
-            // Ignore late callbacks after the session has closed.
-        }
+        peerHandler.post { if (!closed.get()) operation() }
     }
 
     init {
@@ -240,22 +237,18 @@ class WebRtcSession(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         EloraDiagnostics.record("WebRTC session closing; publisher=$publishCamera")
-        try {
-            peerOperations.execute {
-                try { capturer?.stopCapture() } catch (_: Exception) {}
-                capturer?.dispose()
-                localTrack?.dispose()
-                videoSource?.dispose()
-                textureHelper?.dispose()
-                peer.close()
-                peer.dispose()
-                factory.dispose()
-                egl.release()
-                onStatus("WebRTC session closed.")
-                peerOperations.shutdown()
-            }
-        } catch (_: RejectedExecutionException) {
-            peerOperations.shutdown()
+        // Dispose on the same thread used for peer creation and all peer operations.
+        peerHandler.post {
+            try { capturer?.stopCapture() } catch (_: Exception) {}
+            try { capturer?.dispose() } catch (_: Exception) {}
+            try { localTrack?.dispose() } catch (_: Exception) {}
+            try { videoSource?.dispose() } catch (_: Exception) {}
+            try { textureHelper?.dispose() } catch (_: Exception) {}
+            try { peer.close() } catch (_: Exception) {}
+            try { peer.dispose() } catch (_: Exception) {}
+            try { factory.dispose() } catch (_: Exception) {}
+            try { egl.release() } catch (_: Exception) {}
+            onStatus("WebRTC session closed.")
         }
     }
 }
