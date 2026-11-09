@@ -11,8 +11,8 @@ android {
         applicationId = "com.elora.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.1.6"
+        versionCode = 8
+        versionName = "0.2.0-alpha1"
         buildConfigField("String", "ELORA_SIGNALING_URL", "\"wss://elora-signaling.padxiomi91.workers.dev\"")
     }
 
@@ -39,5 +39,7 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // LiveKit media-layer migration spike; legacy WebRTC remains temporarily for the old adapter.
+    implementation("io.livekit:livekit-android:2.29.2")
     implementation("io.github.webrtc-sdk:android:144.7559.15")
 }
