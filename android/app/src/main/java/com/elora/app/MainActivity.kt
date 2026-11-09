@@ -61,7 +61,6 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private lateinit var codeInput: android.widget.EditText
     private lateinit var serverUrlInput: android.widget.EditText
     private lateinit var remoteRenderer: SurfaceViewRenderer
-    private var rendererInitialized = false
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -383,10 +382,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {
         runOnUiThread {
-            if (!rendererInitialized) {
-                initializer(remoteRenderer)
-                rendererInitialized = true
-            }
+            // Each LiveKit Room owns its renderer context; initialize for every new session.
+            initializer(remoteRenderer)
         }
     }
 
