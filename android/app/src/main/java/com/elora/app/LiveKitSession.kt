@@ -34,7 +34,9 @@ class LiveKitSession(
     @Volatile private var connected = false
     @Volatile private var activeRemoteTrack: VideoTrack? = null
 
-    fun prepareRenderer(renderer: SurfaceViewRenderer) { onInitializeRenderer(renderer) }\n\n    fun connect(url: String, token: String) {
+    fun prepareRenderer(renderer: SurfaceViewRenderer) { onInitializeRenderer(renderer) }
+
+    fun connect(url: String, token: String) {
         if (closed.get()) return
         scope.launch {
             try {
