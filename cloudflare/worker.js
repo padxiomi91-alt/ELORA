@@ -200,12 +200,12 @@ export class EloraSignaling extends DurableObject {
         if (this.socketsFor(room.code).some(s => s !== ws && this.getAttachment(s).role === "viewer" && this.getAttachment(s).approved)) {
           return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
         }
-        this.setAttachment(ws, { ...a, approved: true });
         try {
           const [viewerGrant, ownerGrant] = await Promise.all([
             mintLiveKitToken(this.env, room.code, a.viewerId, "viewer"),
             mintLiveKitToken(this.env, room.code, room.owner_id, "owner")
           ]);
+          this.setAttachment(ws, { ...a, approved: true });
           send(ws, "APPROVED", { trusted: true, livekitUrl: viewerGrant.url, livekitToken: viewerGrant.token });
           send(this.ownerSocket(room.code), "VIEWER_AUTO_APPROVED", {
             viewerId: a.viewerId,
@@ -241,20 +241,20 @@ export class EloraSignaling extends DurableObject {
           if (this.socketsFor(room.code).some(s => s !== viewer && this.getAttachment(s).role === "viewer" && this.getAttachment(s).approved)) {
             return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
           }
-          this.setAttachment(viewer, { ...v, approved: true });
-          if (v.deviceId) {
-            const credential = randomToken(32);
-            this.ctx.storage.sql.exec(
-              "INSERT OR REPLACE INTO trusted_devices (owner_id, device_id, token_hash, created_at) VALUES (?, ?, ?, ?)",
-              room.owner_id, v.deviceId, await digest(credential), Date.now()
-            );
-            send(viewer, "TRUST_CREDENTIAL", { credential, ownerId: room.owner_id, deviceId: v.deviceId });
-          }
           try {
             const [viewerGrant, ownerGrant] = await Promise.all([
               mintLiveKitToken(this.env, room.code, v.viewerId, "viewer"),
               mintLiveKitToken(this.env, room.code, room.owner_id, "owner")
             ]);
+            this.setAttachment(viewer, { ...v, approved: true });
+            if (v.deviceId) {
+              const credential = randomToken(32);
+              this.ctx.storage.sql.exec(
+                "INSERT OR REPLACE INTO trusted_devices (owner_id, device_id, token_hash, created_at) VALUES (?, ?, ?, ?)",
+                room.owner_id, v.deviceId, await digest(credential), Date.now()
+              );
+              send(viewer, "TRUST_CREDENTIAL", { credential, ownerId: room.owner_id, deviceId: v.deviceId });
+            }
             send(viewer, "APPROVED", { livekitUrl: viewerGrant.url, livekitToken: viewerGrant.token });
             send(ws, "APPROVAL_CONFIRMED", {
               viewerId: v.viewerId,
