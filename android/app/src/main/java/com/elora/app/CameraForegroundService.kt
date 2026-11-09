@@ -128,7 +128,11 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         activityCallbacks?.onViewerRequest(viewerId)
     }
 
-    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {\n        activityCallbacks?.onInitializeVideoRenderer(initializer)\n    }\n\n    override fun onLocalVideo(track: VideoTrack) {
+    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {
+        activityCallbacks?.onInitializeVideoRenderer(initializer)
+    }
+
+    override fun onLocalVideo(track: VideoTrack) {
         activityCallbacks?.onLocalVideo(track)
     }
 
