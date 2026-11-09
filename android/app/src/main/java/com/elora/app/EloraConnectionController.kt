@@ -1,13 +1,12 @@
 package com.elora.app
 
 import android.content.Context
-import io.livekit.android.renderer.SurfaceViewRenderer
-import io.livekit.android.room.track.VideoTrack
 import org.json.JSONObject
+import org.webrtc.VideoTrack
 
 /**
- * Coordinates private pairing and owner approval. LiveKit carries video only after
- * the signaling service issues a role-limited, short-lived media token.
+ * Coordinates room pairing, owner approval, and WebRTC signaling.
+ * Pass a deployed secure WebSocket URL (wss://...) when creating this controller.
  */
 class EloraConnectionController(
     context: Context,
@@ -20,131 +19,121 @@ class EloraConnectionController(
         fun onViewerRequest(viewerId: String)
         fun onLocalVideo(track: VideoTrack)
         fun onRemoteVideo(track: VideoTrack)
-        fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit)
     }
 
     private val appContext = context.applicationContext
     private val secureStore = EloraSecureStore(appContext)
+    private var joinedOwnerId: String? = null
     private var ownerMode = false
     private var ownerSecret: String? = null
     private var pendingViewerId: String? = null
-    private var liveKit: LiveKitSession? = null
-    private var joinCode: String? = null
-    private var roomCode: String? = null
+    private var webRtc: WebRtcSession? = null
+    private var connected = false
 
     private lateinit var signaling: SignalingClient
 
     init {
         signaling = SignalingClient(serverUrl, object : SignalingClient.Listener {
-            override fun onConnected() {
-                callbacks.onStatus("Connected to ELORA private pairing.")
-                if (ownerMode) signaling.createRoom(secureStore.ownerId())
-                else {
-                    val code = joinCode
-                    if (code != null) signaling.joinRoom(code, secureStore.deviceId())
-                    else callbacks.onStatus("Enter a room code to join.")
+        override fun onConnected() {
+            connected = true
+            callbacks.onStatus("Connected to ELORA signaling.")
+            if (ownerMode) signaling.createRoom(secureStore.ownerId())
+            else {
+                val code = joinCode
+                if (code != null) signaling.joinRoom(code, secureStore.deviceId())
+                else callbacks.onStatus("Enter a room code to join.")
+            }
+        }
+
+        override fun onDisconnected(reason: String) {
+            EloraDiagnostics.record("Signaling disconnected: $reason")
+            connected = false
+            callbacks.onStatus("Disconnected: $reason")
+        }
+
+        override fun onFailure(error: String) {
+            EloraDiagnostics.record("Signaling failure: $error")
+            callbacks.onStatus(error)
+        }
+
+        override fun onMessage(message: JSONObject) {
+            EloraDiagnostics.record("Signaling message: " + message.optString("type"))
+            when (message.optString("type")) {
+                "ROOM_CREATED" -> {
+                    ownerSecret = message.optString("ownerSecret")
+                    callbacks.onRoomCode(message.optString("code"))
+                    callbacks.onStatus("Private room ready. Waiting for viewer.")
                 }
-            }
-
-            override fun onDisconnected(reason: String) {
-                EloraDiagnostics.record("Signaling disconnected: $reason")
-                callbacks.onStatus("Disconnected: $reason")
-            }
-
-            override fun onFailure(error: String) {
-                EloraDiagnostics.record("Signaling failure: $error")
-                callbacks.onStatus(error)
-            }
-
-            override fun onMessage(message: JSONObject) {
-                val type = message.optString("type")
-                EloraDiagnostics.record("Signaling message: $type" +
-                    if (type == "ERROR") " code=${message.optString("code")} message=${message.optString("message")}" else "")
-                when (type) {
-                    "ROOM_CREATED" -> {
-                        ownerSecret = message.optString("ownerSecret")
-                        roomCode = message.optString("code")
-                        callbacks.onRoomCode(message.optString("code"))
-                        callbacks.onStatus("Private room ready. Waiting for viewer.")
+                "JOINED" -> {
+                    joinedOwnerId = message.optString("ownerId").takeIf { it.isNotBlank() }
+                    val credential = joinedOwnerId?.let { secureStore.trustCredential(it) }
+                    signaling.authenticateTrustedDevice(credential)
+                    callbacks.onStatus(if (credential == null) "First-time pairing. Waiting for camera owner approval." else "Checking this trusted device…")
+                }
+                "TRUST_CREDENTIAL" -> {
+                    val ownerId = message.optString("ownerId")
+                    val credential = message.optString("credential")
+                    if (ownerId.isNotBlank() && credential.isNotBlank()) {
+                        secureStore.saveTrustCredential(ownerId, credential)
+                        callbacks.onStatus("This phone is now trusted. Future connections won't need approval.")
                     }
-                    "JOINED" -> {
-                        val ownerId = message.optString("ownerId").takeIf { it.isNotBlank() }
-                        val credential = ownerId?.let { secureStore.trustCredential(it) }
-                        signaling.authenticateTrustedDevice(credential)
-                        callbacks.onStatus(if (credential == null)
-                            "First-time pairing. Waiting for camera owner approval."
-                        else "Checking this trusted device…")
+                }
+                "VIEW_REQUEST" -> {
+                    pendingViewerId = message.optString("viewerId")
+                    callbacks.onViewerRequest(pendingViewerId!!)
+                }
+                "APPROVED" -> callbacks.onStatus(
+                    if (message.optBoolean("trusted")) "Trusted device verified. Connecting video…"
+                    else "Access approved. Connecting video…"
+                )
+                "APPROVAL_CONFIRMED" -> {
+                    EloraDiagnostics.record("Approval confirmed; creating publisher offer")
+                    callbacks.onStatus("Owner approval confirmed. Starting video negotiation…")
+                    try {
+                        webRtc?.createOffer()
+                    } catch (error: Throwable) {
+                        callbacks.onStatus("Video offer failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+                        android.util.Log.e("ELORA", "Creating approved viewer offer failed", error)
                     }
-                    "TRUST_CREDENTIAL" -> {
-                        val ownerId = message.optString("ownerId")
-                        val credential = message.optString("credential")
-                        if (ownerId.isNotBlank() && credential.isNotBlank()) {
-                            secureStore.saveTrustCredential(ownerId, credential)
-                            callbacks.onStatus("This phone is now trusted for future sessions.")
+                }
+                "VIEWER_AUTO_APPROVED" -> {
+                    EloraDiagnostics.record("Trusted viewer auto-approved; creating publisher offer")
+                    callbacks.onStatus("A previously trusted phone reconnected. Starting video…")
+                    webRtc?.createOffer()
+                }
+                "DECLINED" -> callbacks.onStatus("Camera owner declined the request.")
+                "SIGNAL" -> {
+                    val payload = message.optJSONObject("payload")
+                    if (payload != null) {
+                        try {
+                            webRtc?.acceptSignal(payload)
+                        } catch (error: Throwable) {
+                            callbacks.onStatus("Video negotiation failed: ${error.javaClass.simpleName}: ${error.localizedMessage ?: "unknown error"}")
+                            android.util.Log.e("ELORA", "Incoming WebRTC signal failed", error)
                         }
                     }
-                    "VIEW_REQUEST" -> {
-                        pendingViewerId = message.optString("viewerId")
-                        callbacks.onViewerRequest(pendingViewerId!!)
-                    }
-                    "APPROVED" -> {
-                        callbacks.onStatus(if (message.optBoolean("trusted"))
-                            "Trusted device verified. Connecting secure video…"
-                        else "Access approved. Connecting secure video…")
-                        connectLiveKit(message, publish = false)
-                    }
-                    "APPROVAL_CONFIRMED" -> {
-                        callbacks.onStatus("Owner approval confirmed. Starting secure camera…")
-                        connectLiveKit(message, publish = true)
-                    }
-                    "VIEWER_AUTO_APPROVED" -> {
-                        callbacks.onStatus("Trusted viewer verified. Starting secure camera…")
-                        connectLiveKit(message, publish = true)
-                    }
-                    "DECLINED" -> callbacks.onStatus("Camera owner declined the request.")
-                    "DEVICE_REVOKED" -> callbacks.onStatus("Trusted device revoked. It must be approved again.")
-                    "ROOM_CLOSED" -> {
-                        liveKit?.close()
-                        liveKit = null
-                        callbacks.onStatus("Private room closed.")
-                    }
-                    "PEER_OFFLINE" -> callbacks.onStatus("The other phone is offline.")
-                    "ERROR" -> callbacks.onStatus(message.optString("message", message.optString("code", "Server error")))
                 }
+                "DEVICE_REVOKED" -> callbacks.onStatus("Trusted device revoked. It must be approved again.")
+                "ROOM_CLOSED" -> callbacks.onStatus("Private room closed.")
+                "PEER_OFFLINE" -> callbacks.onStatus("The other phone is offline.")
+                "ERROR" -> callbacks.onStatus(message.optString("message", message.optString("code", "Server error")))
             }
+        }
         })
-    }
-
-    private fun connectLiveKit(message: JSONObject, publish: Boolean) {
-        val url = message.optString("livekitUrl")
-        val token = message.optString("livekitToken")
-        if (url.isBlank() || token.isBlank()) {
-            callbacks.onStatus("Secure video service is not configured on the ELORA server yet.")
-            EloraDiagnostics.record("LiveKit token missing from approved signaling response")
-            return
-        }
-        if (publish != ownerMode) {
-            callbacks.onStatus("ELORA role check failed. Reopen the private room.")
-            return
-        }
-        liveKit?.close()
-        val session = LiveKitSession(
-            appContext,
-            publish,
-            { status -> callbacks.onStatus(status) },
-            { track -> callbacks.onLocalVideo(track) },
-            { track -> callbacks.onRemoteVideo(track) }
-        )
-        liveKit = session
-        callbacks.onInitializeVideoRenderer { renderer -> session.initializeRenderer(renderer) }
-        session.connect(url, token)
     }
 
     fun createCameraRoom() {
         EloraDiagnostics.record("Creating camera publisher session")
         ownerMode = true
-        liveKit?.close()
-        liveKit = null
+        webRtc?.close()
+        webRtc = WebRtcSession(
+            appContext,
+            true,
+            { payload -> signaling.sendSignal(payload, ownerSecret) },
+            { status -> callbacks.onStatus(status) },
+            { track -> callbacks.onLocalVideo(track) },
+            { track -> callbacks.onRemoteVideo(track) }
+        )
         signaling.connect()
     }
 
@@ -154,18 +143,30 @@ class EloraConnectionController(
             return
         }
         ownerMode = false
-        liveKit?.close()
-        liveKit = null
+        webRtc?.close()
+        webRtc = WebRtcSession(
+            appContext,
+            false,
+            { payload -> signaling.sendSignal(payload) },
+            { status -> callbacks.onStatus(status) },
+            { _ -> },
+            { track -> callbacks.onRemoteVideo(track) }
+        )
         joinCode = code
         signaling.connect()
     }
+
+    private var joinCode: String? = null
 
     fun approvePendingViewer(): Boolean {
         EloraDiagnostics.record("Approve viewer action requested")
         val id = pendingViewerId ?: return false
         val secret = ownerSecret ?: return false
         val approved = signaling.approveViewer(id, secret)
-        if (approved) pendingViewerId = null
+        if (approved) {
+            pendingViewerId = null
+            // The server sends APPROVAL_CONFIRMED after it has approved the viewer.
+        }
         return approved
     }
 
@@ -183,19 +184,20 @@ class EloraConnectionController(
     }
 
     fun switchCamera() {
-        liveKit?.switchCamera()
+        webRtc?.switchCamera()
     }
 
     fun close() {
         EloraDiagnostics.record("Connection controller closing; ownerMode=$ownerMode")
         val secret = ownerSecret
         if (ownerMode && secret != null) signaling.closeRoom(secret)
-        liveKit?.close()
-        liveKit = null
+        webRtc?.close()
+        webRtc = null
         signaling.disconnect()
         ownerSecret = null
         pendingViewerId = null
         joinCode = null
-        roomCode = null
+        joinedOwnerId = null
+        connected = false
     }
 }
