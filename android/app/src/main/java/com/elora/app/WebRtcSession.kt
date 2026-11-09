@@ -4,8 +4,8 @@ import android.content.Context
 import org.json.JSONObject
 import org.webrtc.Camera2Enumerator
 import org.webrtc.CameraVideoCapturer
-import org.webrtc.DefaultVideoDecoderFactory
-import org.webrtc.DefaultVideoEncoderFactory
+import org.webrtc.SoftwareVideoDecoderFactory
+import org.webrtc.SoftwareVideoEncoderFactory
 import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -77,8 +77,8 @@ class WebRtcSession(
         EloraDiagnostics.record(if (publishCamera) "WebRTC publisher initialization started" else "WebRTC viewer initialization started")
         EloraWebRtcRuntime.initialize(appContext)
         factory = PeerConnectionFactory.builder()
-            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
-            .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
+            .setVideoEncoderFactory(SoftwareVideoEncoderFactory())
+            .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
             .createPeerConnectionFactory()
 
         val iceServers = listOf(
@@ -125,8 +125,8 @@ class WebRtcSession(
                 ?: error("Could not create camera texture")
             val source = factory.createVideoSource(false)
             camera.initialize(texture, appContext, source.capturerObserver)
-            EloraDiagnostics.record("Starting camera capture 1280x720@24")
-            camera.startCapture(1280, 720, 24)
+            EloraDiagnostics.record("Starting conservative software WebRTC capture 640x480@15")
+            camera.startCapture(640, 480, 15)
             EloraDiagnostics.record("Camera capture started")
             val track = factory.createVideoTrack("ELORA_VIDEO", source)
             peer.addTrack(track, listOf("ELORA_STREAM"))
@@ -251,13 +251,19 @@ class WebRtcSession(
         EloraDiagnostics.record("WebRTC session closing; publisher=$publishCamera")
         // Dispose on the same thread used for peer creation and all peer operations.
         val cleanup = Runnable {
-            try { capturer?.stopCapture() } catch (_: Exception) {}
-            try { capturer?.dispose() } catch (_: Exception) {}
-            try { localTrack?.dispose() } catch (_: Exception) {}
-            try { videoSource?.dispose() } catch (_: Exception) {}
-            try { textureHelper?.dispose() } catch (_: Exception) {}
-            try { peer.close() } catch (_: Exception) {}
-            try { peer.dispose() } catch (_: Exception) {}
+            // Detach the native peer before releasing its media resources.
+            try { peer.close() } catch (error: Throwable) {
+                EloraDiagnostics.record("Peer close failed: " + error.javaClass.simpleName)
+            }
+            try { capturer?.stopCapture() } catch (error: Throwable) {
+                EloraDiagnostics.record("Camera stop failed: " + error.javaClass.simpleName)
+            }
+            try { localTrack?.setEnabled(false) } catch (_: Throwable) {}
+            try { localTrack?.dispose() } catch (_: Throwable) {}
+            try { videoSource?.dispose() } catch (_: Throwable) {}
+            try { capturer?.dispose() } catch (_: Throwable) {}
+            try { textureHelper?.dispose() } catch (_: Throwable) {}
+            try { peer.dispose() } catch (_: Throwable) {}
             try { factory.dispose() } catch (_: Exception) {}
             try { egl.release() } catch (_: Exception) {}
             onStatus("WebRTC session closed.")
