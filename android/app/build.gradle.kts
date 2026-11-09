@@ -39,6 +39,5 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:1.4.2")
     implementation("androidx.camera:camera-view:1.4.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    // LiveKit is the sole media transport; legacy native WebRTC adapter removed.
-    implementation("io.livekit:livekit-android:2.29.2")
+    implementation("io.github.webrtc-sdk:android:144.7559.15")
 }
