@@ -357,8 +357,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRoomCode(code: String) {
         runOnUiThread {
-            roomCodeText.text = "PRIVATE CODE
-$code"
+            roomCodeText.text = "PRIVATE CODE\n$code"
             statusText.text = "Share this code only with the phone you trust."
         }
     }
