@@ -133,10 +133,10 @@ class EloraConnectionController(
             publish,
             { status -> callbacks.onStatus(status) },
             { track -> callbacks.onLocalVideo(track) },
-            { track -> callbacks.onRemoteVideo(track) },
-            { initializer -> callbacks.onInitializeVideoRenderer(initializer) }
+            { track -> callbacks.onRemoteVideo(track) }
         )
         liveKit = session
+        callbacks.onInitializeVideoRenderer { renderer -> session.initializeRenderer(renderer) }
         session.connect(url, token)
     }
 
