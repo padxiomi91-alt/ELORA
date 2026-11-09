@@ -97,9 +97,7 @@ class LiveKitSession(
             try {
                 val publication = room.localParticipant.getTrackPublication(Track.Source.CAMERA)
                 val track = publication?.track as? io.livekit.android.room.track.LocalVideoTrack
-                val capturer = track?.capturer
-                val cameraCapturer = capturer as? livekit.org.webrtc.CameraVideoCapturer
-                cameraCapturer?.switchCamera(null)
+                track?.switchCamera()
             } catch (error: Throwable) {
                 onStatus("Could not switch camera: ${error.localizedMessage ?: error.javaClass.simpleName}")
             }
