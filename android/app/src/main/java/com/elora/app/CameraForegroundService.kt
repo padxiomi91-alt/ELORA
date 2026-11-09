@@ -10,8 +10,6 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import io.livekit.android.renderer.SurfaceViewRenderer
-import io.livekit.android.room.track.VideoTrack
 
 /**
  * Owns the camera publishing session so it can outlive MainActivity while
@@ -67,7 +65,6 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     @Synchronized
     fun startCameraRoom(serverUrl: String) {
         EloraDiagnostics.record("Camera room startup requested")
-        stopBroadcastSent = false
         // Activity recreation/rebinding can request startup more than once.
         // Keep the existing publisher alive while a viewer is negotiating.
         if (controller != null && activeServerUrl == serverUrl) {
@@ -129,15 +126,11 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         activityCallbacks?.onViewerRequest(viewerId)
     }
 
-    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {
-        activityCallbacks?.onInitializeVideoRenderer(initializer)
-    }
-
-    override fun onLocalVideo(track: VideoTrack) {
+    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
         activityCallbacks?.onLocalVideo(track)
     }
 
-    override fun onRemoteVideo(track: VideoTrack) {
+    override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
         activityCallbacks?.onRemoteVideo(track)
     }
 
@@ -190,7 +183,6 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         controller = null
         activeServerUrl = null
         if (!stopBroadcastSent) {
-            stopBroadcastSent = true
             sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
         }
         super.onDestroy()
