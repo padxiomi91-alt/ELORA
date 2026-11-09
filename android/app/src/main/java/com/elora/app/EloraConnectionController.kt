@@ -57,7 +57,7 @@ class EloraConnectionController(
         }
 
         override fun onMessage(message: JSONObject) {
-            EloraDiagnostics.record("Signaling message: " + message.optString("type"))
+            EloraDiagnostics.record("Signaling message: " + message.optString("type") + if (message.optString("type") == "ERROR") " code=${message.optString("code")} message=${message.optString("message")}" else "")
             when (message.optString("type")) {
                 "ROOM_CREATED" -> {
                     ownerSecret = message.optString("ownerSecret")
