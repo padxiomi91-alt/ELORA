@@ -100,11 +100,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             )
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
-        remoteRenderer = org.webrtc.SurfaceViewRenderer(this).apply {
+        remoteRenderer = SurfaceViewRenderer(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 260)
-            rendererEgl = org.webrtc.EglBase.create()
-            init(rendererEgl!!.eglBaseContext, null)
-            setEnableHardwareScaler(true)
         }
         roomCodeText = TextView(this).apply { textSize = 22f; setPadding(0, 8, 0, 8) }
         codeInput = android.widget.EditText(this).apply {
