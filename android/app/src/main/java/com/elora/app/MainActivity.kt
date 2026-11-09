@@ -323,7 +323,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private fun stopCamera() {
         connection?.close()
         connection = null
-        remoteVideoTrack?.removeSink(remoteRenderer)
+        remoteVideoTrack?.removeRenderer(remoteRenderer)
         remoteVideoTrack = null
         remoteRenderer.clearImage()
         stopPreview()
@@ -360,7 +360,8 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRoomCode(code: String) {
         runOnUiThread {
-            roomCodeText.text = "PRIVATE CODE\n$code"
+            roomCodeText.text = "PRIVATE CODE
+$code"
             statusText.text = "Share this code only with the phone you trust."
         }
     }
@@ -395,7 +396,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onLocalVideo(track: VideoTrack) {
         runOnUiThread {
-            remoteVideoTrack?.removeSink(remoteRenderer)
+            remoteVideoTrack?.removeRenderer(remoteRenderer)
             remoteVideoTrack = track
             track.addRenderer(remoteRenderer)
             statusText.text = "Camera preview active."
@@ -404,9 +405,9 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
 
     override fun onRemoteVideo(track: VideoTrack) {
         runOnUiThread {
-            remoteVideoTrack?.removeSink(remoteRenderer)
+            remoteVideoTrack?.removeRenderer(remoteRenderer)
             remoteVideoTrack = track
-            track.addSink(remoteRenderer)
+            track.addRenderer(remoteRenderer)
             statusText.text = "Live video connected."
         }
     }
@@ -422,7 +423,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             cameraServiceBound = false
         }
         stopPreview()
-        remoteVideoTrack?.removeSink(remoteRenderer)
+        remoteVideoTrack?.removeRenderer(remoteRenderer)
         remoteRenderer.release()
 
         if (receiverRegistered) unregisterReceiver(stopReceiver)
