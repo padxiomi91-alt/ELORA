@@ -25,7 +25,7 @@ const same = (a, b) => {
 const base64Url = bytes => {
   let binary = "";
   new Uint8Array(bytes).forEach(b => binary += String.fromCharCode(b));
-  return btoa(binary).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 };
 const base64UrlText = value => base64Url(new TextEncoder().encode(value));
 const mintLiveKitToken = async (env, roomName, identity, role) => {
