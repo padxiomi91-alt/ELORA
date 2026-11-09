@@ -24,8 +24,7 @@ class LiveKitSession(
     private val publishCamera: Boolean,
     private val onStatus: (String) -> Unit,
     private val onLocalVideo: (VideoTrack) -> Unit,
-    private val onRemoteVideo: (VideoTrack) -> Unit,
-    private val onInitializeRenderer: (SurfaceViewRenderer) -> Unit
+    private val onRemoteVideo: (VideoTrack) -> Unit
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -33,8 +32,6 @@ class LiveKitSession(
     private val closed = AtomicBoolean(false)
     @Volatile private var connected = false
     @Volatile private var activeRemoteTrack: VideoTrack? = null
-
-    fun prepareRenderer(renderer: SurfaceViewRenderer) { onInitializeRenderer(renderer) }
 
     fun connect(url: String, token: String) {
         if (closed.get()) return
