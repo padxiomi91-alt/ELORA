@@ -67,6 +67,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
     @Synchronized
     fun startCameraRoom(serverUrl: String) {
         EloraDiagnostics.record("Camera room startup requested")
+        stopBroadcastSent = false
         // Activity recreation/rebinding can request startup more than once.
         // Keep the existing publisher alive while a viewer is negotiating.
         if (controller != null && activeServerUrl == serverUrl) {
@@ -189,6 +190,7 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         controller = null
         activeServerUrl = null
         if (!stopBroadcastSent) {
+            stopBroadcastSent = true
             sendBroadcast(Intent(ACTION_CAMERA_STOPPED).setPackage(packageName))
         }
         super.onDestroy()
