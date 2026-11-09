@@ -32,6 +32,7 @@ class LiveKitSession(
     private val closed = AtomicBoolean(false)
     @Volatile private var connected = false
     @Volatile private var activeRemoteTrack: VideoTrack? = null
+    @Volatile private var videoRenderer: SurfaceViewRenderer? = null
 
     fun connect(url: String, token: String) {
         if (closed.get()) return
@@ -49,6 +50,7 @@ class LiveKitSession(
                         is RoomEvent.TrackUnsubscribed -> {
                             if (event.track is VideoTrack && event.track === activeRemoteTrack) {
                                 activeRemoteTrack = null
+                                videoRenderer?.let { event.track.removeRenderer(it) }
                                 onStatus("Camera video paused.")
                             }
                         }
@@ -87,6 +89,7 @@ class LiveKitSession(
     }
 
     fun initializeRenderer(renderer: SurfaceViewRenderer) {
+        videoRenderer = renderer
         room.initVideoRenderer(renderer)
     }
 
@@ -106,7 +109,9 @@ class LiveKitSession(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         try {
+            activeRemoteTrack?.let { track -> videoRenderer?.let(track::removeRenderer) }
             activeRemoteTrack = null
+            videoRenderer = null
             room.disconnect()
             room.release()
         } catch (_: Throwable) {
