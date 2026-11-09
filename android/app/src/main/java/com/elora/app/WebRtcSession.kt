@@ -20,8 +20,11 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.VideoSource
 import org.webrtc.VideoTrack
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Native WebRTC peer for ELORA.
@@ -51,9 +54,9 @@ class WebRtcSession(
     private val onRemoteVideo: (VideoTrack) -> Unit
 ) {
     private val appContext = context.applicationContext
-    private val egl = EglBase.create()
-    private val factory: PeerConnectionFactory
-    private val peer: PeerConnection
+    private lateinit var egl: EglBase
+    private lateinit var factory: PeerConnectionFactory
+    private lateinit var peer: PeerConnection
     private var videoSource: VideoSource? = null
     private var capturer: CameraVideoCapturer? = null
     private var textureHelper: SurfaceTextureHelper? = null
@@ -64,10 +67,21 @@ class WebRtcSession(
     private val offerStarted = AtomicBoolean(false)
     private val answerStarted = AtomicBoolean(false)
     private val remoteOfferAccepted = AtomicBoolean(false)
-    // Android WebRTC's PeerConnection API is driven from one consistent thread.
-    // Use the main looper (also used to construct the peer) instead of a private
-    // executor, which can violate native signaling-thread affinity on some builds.
-    private val peerHandler = Handler(Looper.getMainLooper())
+    // Serialize peer creation, SDP, ICE and disposal on one dedicated thread.
+    private val peerThread = HandlerThread("ELORA-WebRTC").apply { start() }
+    private val peerHandler = Handler(peerThread.looper)
+
+    private fun runPeerSync(operation: () -> Unit) {
+        if (Thread.currentThread() === peerThread) { operation(); return }
+        val latch = CountDownLatch(1)
+        val failure = AtomicReference<Throwable?>(null)
+        peerHandler.post {
+            try { operation() } catch (error: Throwable) { failure.set(error) }
+            finally { latch.countDown() }
+        }
+        if (!latch.await(20, TimeUnit.SECONDS)) throw IllegalStateException("Timed out initializing WebRTC peer thread")
+        failure.get()?.let { throw it }
+    }
 
     private fun dispatchPeerOperation(operation: () -> Unit) {
         if (closed.get()) return
@@ -77,6 +91,8 @@ class WebRtcSession(
     init {
         EloraDiagnostics.record(if (publishCamera) "WebRTC publisher initialization started" else "WebRTC viewer initialization started")
         EloraWebRtcRuntime.initialize(appContext)
+        runPeerSync {
+        egl = EglBase.create()
         factory = PeerConnectionFactory.builder()
             .setVideoEncoderFactory(SoftwareVideoEncoderFactory())
             .setVideoDecoderFactory(SoftwareVideoDecoderFactory())
@@ -149,6 +165,8 @@ class WebRtcSession(
                 RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.RECV_ONLY)
             )
             onStatus("Viewer ready. Waiting for camera video.")
+        }
+        EloraDiagnostics.record("WebRTC peer and media initialized on dedicated thread")
         }
     }
 
@@ -275,7 +293,9 @@ class WebRtcSession(
             try { egl.release() } catch (_: Exception) {}
             onStatus("WebRTC session closed.")
         }
-        if (Looper.myLooper() == Looper.getMainLooper()) cleanup.run()
-        else peerHandler.post(cleanup)
+        peerHandler.post {
+            try { cleanup.run() }
+            finally { peerThread.quitSafely() }
+        }
     }
 }
