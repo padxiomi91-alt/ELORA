@@ -21,8 +21,6 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
-import io.livekit.android.renderer.SurfaceViewRenderer
-import io.livekit.android.room.track.VideoTrack
 
 class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private val cameraRequest = 41
@@ -56,11 +54,12 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             cameraServiceBound = false
         }
     }
-    private var remoteVideoTrack: VideoTrack? = null
+    private var remoteVideoTrack: org.webrtc.VideoTrack? = null
     private lateinit var roomCodeText: TextView
     private lateinit var codeInput: android.widget.EditText
     private lateinit var serverUrlInput: android.widget.EditText
-    private lateinit var remoteRenderer: SurfaceViewRenderer
+    private lateinit var remoteRenderer: org.webrtc.SurfaceViewRenderer
+    private var rendererEgl: org.webrtc.EglBase? = null
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -68,7 +67,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             connection = null
             cameraService?.setCallbacks(null)
             cameraService = null
-            remoteVideoTrack?.removeRenderer(remoteRenderer)
+            remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = null
             remoteRenderer.clearImage()
             if (cameraServiceBound) {
@@ -99,8 +98,11 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             )
             scaleType = PreviewView.ScaleType.FILL_CENTER
         }
-        remoteRenderer = SurfaceViewRenderer(this).apply {
+        remoteRenderer = org.webrtc.SurfaceViewRenderer(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 260)
+            rendererEgl = org.webrtc.EglBase.create()
+            init(rendererEgl!!.eglBaseContext, null)
+            setEnableHardwareScaler(true)
         }
         roomCodeText = TextView(this).apply { textSize = 22f; setPadding(0, 8, 0, 8) }
         codeInput = android.widget.EditText(this).apply {
@@ -319,7 +321,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private fun stopCamera() {
         connection?.close()
         connection = null
-        remoteVideoTrack?.removeRenderer(remoteRenderer)
+        remoteVideoTrack?.removeSink(remoteRenderer)
         remoteVideoTrack = null
         remoteRenderer.clearImage()
         stopPreview()
@@ -380,27 +382,20 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         }
     }
 
-    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {
+    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
         runOnUiThread {
-            // Each LiveKit Room owns its renderer context; initialize for every new session.
-            initializer(remoteRenderer)
-        }
-    }
-
-    override fun onLocalVideo(track: VideoTrack) {
-        runOnUiThread {
-            remoteVideoTrack?.removeRenderer(remoteRenderer)
+            remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = track
-            track.addRenderer(remoteRenderer)
+            track.addSink(remoteRenderer)
             statusText.text = "Camera preview active."
         }
     }
 
-    override fun onRemoteVideo(track: VideoTrack) {
+    override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
         runOnUiThread {
-            remoteVideoTrack?.removeRenderer(remoteRenderer)
+            remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = track
-            track.addRenderer(remoteRenderer)
+            track.addSink(remoteRenderer)
             statusText.text = "Live video connected."
         }
     }
@@ -416,9 +411,9 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             cameraServiceBound = false
         }
         stopPreview()
-        remoteVideoTrack?.removeRenderer(remoteRenderer)
+        remoteVideoTrack?.removeSink(remoteRenderer)
         remoteRenderer.release()
-
+        rendererEgl?.release()
         if (receiverRegistered) unregisterReceiver(stopReceiver)
         super.onDestroy()
     }
