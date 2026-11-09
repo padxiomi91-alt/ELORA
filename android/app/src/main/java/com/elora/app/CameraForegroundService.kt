@@ -10,6 +10,8 @@ import android.content.pm.ServiceInfo
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import io.livekit.android.renderer.SurfaceViewRenderer
+import io.livekit.android.room.track.VideoTrack
 
 /**
  * Owns the camera publishing session so it can outlive MainActivity while
@@ -126,11 +128,11 @@ class CameraForegroundService : Service(), EloraConnectionController.Callbacks {
         activityCallbacks?.onViewerRequest(viewerId)
     }
 
-    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
+    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {\n        activityCallbacks?.onInitializeVideoRenderer(initializer)\n    }\n\n    override fun onLocalVideo(track: VideoTrack) {
         activityCallbacks?.onLocalVideo(track)
     }
 
-    override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
+    override fun onRemoteVideo(track: VideoTrack) {
         activityCallbacks?.onRemoteVideo(track)
     }
 
