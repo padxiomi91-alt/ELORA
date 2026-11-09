@@ -19,9 +19,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate Worker bundle
+      - name: Validate production Worker bundle (dry run only)
         working-directory: cloudflare
         run: npx --yes wrangler@4 deploy --dry-run --outdir=./.worker-build
+      - name: Validate isolated staging Worker bundle (dry run only)
+        working-directory: cloudflare
+        run: npx --yes wrangler@4 deploy --config wrangler.staging.toml --dry-run --outdir=./.worker-build-staging
       - name: Check deployed signaling health
         run: |
           response="$(curl --fail --silent --show-error --retry 8 --retry-delay 2 --retry-connrefused https://elora-signaling.padxiomi91.workers.dev/health)"
