@@ -48,9 +48,10 @@ class LiveKitSession(
                             }
                         }
                         is RoomEvent.TrackUnsubscribed -> {
-                            if (event.track is VideoTrack && event.track === activeRemoteTrack) {
+                            val unsubscribedTrack = event.track as? VideoTrack
+                            if (unsubscribedTrack != null && unsubscribedTrack === activeRemoteTrack) {
                                 activeRemoteTrack = null
-                                videoRenderer?.let { event.track.removeRenderer(it) }
+                                videoRenderer?.let { renderer -> unsubscribedTrack.removeRenderer(renderer) }
                                 onStatus("Camera video paused.")
                             }
                         }
