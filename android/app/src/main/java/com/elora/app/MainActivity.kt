@@ -21,6 +21,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import io.livekit.android.renderer.SurfaceViewRenderer
+import io.livekit.android.room.track.VideoTrack
 
 class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
     private val cameraRequest = 41
@@ -54,12 +56,12 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             cameraServiceBound = false
         }
     }
-    private var remoteVideoTrack: org.webrtc.VideoTrack? = null
+    private var remoteVideoTrack: VideoTrack? = null
     private lateinit var roomCodeText: TextView
     private lateinit var codeInput: android.widget.EditText
     private lateinit var serverUrlInput: android.widget.EditText
-    private lateinit var remoteRenderer: org.webrtc.SurfaceViewRenderer
-    private var rendererEgl: org.webrtc.EglBase? = null
+    private lateinit var remoteRenderer: SurfaceViewRenderer
+    private var rendererInitialized = false
 
     private val stopReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,7 +69,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
             connection = null
             cameraService?.setCallbacks(null)
             cameraService = null
-            remoteVideoTrack?.removeSink(remoteRenderer)
+            remoteVideoTrack?.removeRenderer(remoteRenderer)
             remoteVideoTrack = null
             remoteRenderer.clearImage()
             if (cameraServiceBound) {
@@ -382,16 +384,25 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         }
     }
 
-    override fun onLocalVideo(track: org.webrtc.VideoTrack) {
+    override fun onInitializeVideoRenderer(initializer: (SurfaceViewRenderer) -> Unit) {
+        runOnUiThread {
+            if (!rendererInitialized) {
+                initializer(remoteRenderer)
+                rendererInitialized = true
+            }
+        }
+    }
+
+    override fun onLocalVideo(track: VideoTrack) {
         runOnUiThread {
             remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = track
-            track.addSink(remoteRenderer)
+            track.addRenderer(remoteRenderer)
             statusText.text = "Camera preview active."
         }
     }
 
-    override fun onRemoteVideo(track: org.webrtc.VideoTrack) {
+    override fun onRemoteVideo(track: VideoTrack) {
         runOnUiThread {
             remoteVideoTrack?.removeSink(remoteRenderer)
             remoteVideoTrack = track
@@ -413,7 +424,7 @@ class MainActivity : AppCompatActivity(), EloraConnectionController.Callbacks {
         stopPreview()
         remoteVideoTrack?.removeSink(remoteRenderer)
         remoteRenderer.release()
-        rendererEgl?.release()
+
         if (receiverRegistered) unregisterReceiver(stopReceiver)
         super.onDestroy()
     }
