@@ -206,16 +206,23 @@ class WebRtcSession(
                     EloraDiagnostics.record("Duplicate remote offer ignored")
                     return@dispatchPeerOperation
                 }
-                val description = SessionDescription(SessionDescription.Type.OFFER, message.getString("sdp"))
+                val sdp = message.getString("sdp")
+                EloraDiagnostics.record("REMOTE_OFFER_SDP_RECEIVED chars=${sdp.length}")
+                val description = SessionDescription(SessionDescription.Type.OFFER, sdp)
+                EloraDiagnostics.record("REMOTE_DESCRIPTION_SET_BEGIN type=OFFER")
                 peer.setRemoteDescription(object : SdpObserver {
                     override fun onSetSuccess() {
+                        EloraDiagnostics.record("REMOTE_DESCRIPTION_SET_SUCCESS type=OFFER")
                         dispatchPeerOperation {
                             remoteDescriptionSet = true
                             flushCandidates()
                             if (!answerStarted.compareAndSet(false, true)) return@dispatchPeerOperation
+                            EloraDiagnostics.record("CREATE_ANSWER_BEGIN")
                             peer.createAnswer(object : SdpObserver {
                                 override fun onCreateSuccess(answer: SessionDescription) {
+                                    EloraDiagnostics.record("CREATE_ANSWER_SUCCESS chars=${answer.description.length}")
                                     dispatchPeerOperation {
+                                        EloraDiagnostics.record("LOCAL_ANSWER_SET_BEGIN")
                                         peer.setLocalDescription(object : SdpObserver {
                                             override fun onSetSuccess() {
                                                 if (!closed.get()) onSignal(JSONObject().put("kind", "answer").put("sdp", answer.description))
@@ -232,13 +239,19 @@ class WebRtcSession(
                             }, MediaConstraints())
                         }
                     }
-                    override fun onSetFailure(error: String) { onStatus("Offer rejected: $error") }
+                    override fun onSetFailure(error: String) {
+                        EloraDiagnostics.record("REMOTE_DESCRIPTION_SET_FAILURE type=OFFER: $error")
+                        onStatus("Offer rejected: $error")
+                    }
                     override fun onCreateSuccess(description: SessionDescription) {}
                     override fun onCreateFailure(error: String) {}
                 }, description)
             }
             "answer" -> {
-                val description = SessionDescription(SessionDescription.Type.ANSWER, message.getString("sdp"))
+                val sdp = message.getString("sdp")
+                EloraDiagnostics.record("REMOTE_ANSWER_SDP_RECEIVED chars=${sdp.length}")
+                val description = SessionDescription(SessionDescription.Type.ANSWER, sdp)
+                EloraDiagnostics.record("REMOTE_DESCRIPTION_SET_BEGIN type=ANSWER")
                 peer.setRemoteDescription(object : SdpObserver {
                     override fun onSetSuccess() {
                         dispatchPeerOperation {
