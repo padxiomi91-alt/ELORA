@@ -1,0 +1,13 @@
+name = "elora-signaling-staging"
+main = "worker.js"
+compatibility_date = "2026-11-06"
+
+# Isolated staging Durable Object namespace. This does not share production room
+# state or trusted-device records.
+[[durable_objects.bindings]]
+name = "ELORA_SIGNALLING"
+class_name = "EloraSignaling"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EloraSignaling"]
