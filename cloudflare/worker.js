@@ -22,6 +22,44 @@ const same = (a, b) => {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 };
+const base64Url = bytes => {
+  let binary = "";
+  new Uint8Array(bytes).forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/g, "");
+};
+const base64UrlText = value => base64Url(new TextEncoder().encode(value));
+const mintLiveKitToken = async (env, roomName, identity, role) => {
+  const apiKey = env.LIVEKIT_API_KEY;
+  const apiSecret = env.LIVEKIT_API_SECRET;
+  const livekitUrl = env.LIVEKIT_URL;
+  if (!apiKey || !apiSecret || !livekitUrl) throw new Error("LIVEKIT_NOT_CONFIGURED");
+  const now = Math.floor(Date.now() / 1000);
+  const header = base64UrlText(JSON.stringify({ alg: "HS256", typ: "JWT" }));
+  const claims = {
+    iss: apiKey,
+    sub: identity,
+    name: role === "owner" ? "ELORA Camera" : "ELORA Viewer",
+    nbf: now - 5,
+    iat: now,
+    exp: now + 300,
+    video: {
+      roomJoin: true,
+      room: roomName,
+      canPublish: role === "owner",
+      canSubscribe: role === "viewer",
+      canPublishData: false,
+      ...(role === "owner" ? { canPublishSources: ["camera"] } : {})
+    }
+  };
+  const payload = base64UrlText(JSON.stringify(claims));
+  const signingInput = header + "." + payload;
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(apiSecret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(signingInput));
+  return { url: livekitUrl, token: signingInput + "." + base64Url(signature) };
+};
 const send = (ws, type, fields = {}) => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     try { ws.send(json(type, fields)); } catch {}
@@ -163,11 +201,22 @@ export class EloraSignaling extends DurableObject {
           return send(ws, "ERROR", { code: "VIEWER_ALREADY_ACTIVE" });
         }
         this.setAttachment(ws, { ...a, approved: true });
-        send(ws, "APPROVED", { trusted: true });
-        send(this.ownerSocket(room.code), "VIEWER_AUTO_APPROVED", {
-          viewerId: a.viewerId,
-          deviceId: a.deviceId
-        });
+        try {
+          const [viewerGrant, ownerGrant] = await Promise.all([
+            mintLiveKitToken(this.env, room.code, a.viewerId, "viewer"),
+            mintLiveKitToken(this.env, room.code, room.owner_id, "owner")
+          ]);
+          send(ws, "APPROVED", { trusted: true, livekitUrl: viewerGrant.url, livekitToken: viewerGrant.token });
+          send(this.ownerSocket(room.code), "VIEWER_AUTO_APPROVED", {
+            viewerId: a.viewerId,
+            deviceId: a.deviceId,
+            livekitUrl: ownerGrant.url,
+            livekitToken: ownerGrant.token
+          });
+        } catch (error) {
+          send(ws, "ERROR", { code: "LIVEKIT_TOKEN_FAILED", message: error.message });
+          send(this.ownerSocket(room.code), "ERROR", { code: "LIVEKIT_TOKEN_FAILED", message: error.message });
+        }
         return;
       }
       if (!a.requested) {
@@ -201,8 +250,21 @@ export class EloraSignaling extends DurableObject {
             );
             send(viewer, "TRUST_CREDENTIAL", { credential, ownerId: room.owner_id, deviceId: v.deviceId });
           }
-          send(viewer, "APPROVED");
-          send(ws, "APPROVAL_CONFIRMED", { viewerId: v.viewerId });
+          try {
+            const [viewerGrant, ownerGrant] = await Promise.all([
+              mintLiveKitToken(this.env, room.code, v.viewerId, "viewer"),
+              mintLiveKitToken(this.env, room.code, room.owner_id, "owner")
+            ]);
+            send(viewer, "APPROVED", { livekitUrl: viewerGrant.url, livekitToken: viewerGrant.token });
+            send(ws, "APPROVAL_CONFIRMED", {
+              viewerId: v.viewerId,
+              livekitUrl: ownerGrant.url,
+              livekitToken: ownerGrant.token
+            });
+          } catch (error) {
+            send(viewer, "ERROR", { code: "LIVEKIT_TOKEN_FAILED", message: error.message });
+            send(ws, "ERROR", { code: "LIVEKIT_TOKEN_FAILED", message: error.message });
+          }
         } else {
           send(viewer, "DECLINED");
           viewer.close(1000, "Request declined");
